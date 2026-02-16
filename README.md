@@ -114,6 +114,20 @@ The agent maintains a git-tracked knowledge base that grows over time:
 
 Create additional topic files as needed. The agent links them together with `[[wiki-links]]`.
 
+## Email & Secrets
+
+**Secrets vault.** The agent has an encrypted credential store (`~/.relaygent/secrets.enc`) using AES-256-GCM with PBKDF2 key derivation. Setup prompts for a master password, which encrypts all stored credentials. The agent accesses secrets through MCP tools (`secrets_get`, `secrets_set`, `secrets_list`, `secrets_delete`).
+
+**Gmail integration.** Each agent gets its own email address as identity. The `email` MCP provides 6 tools: `search_emails`, `read_email`, `send_email`, `draft_email`, `modify_email`, and `list_email_labels`. OAuth2 credentials are stored at `~/.relaygent/gmail/`.
+
+**Setup flow:**
+1. During `./setup.sh`, you're prompted for a master password and email password
+2. The vault is created and the email password is stored
+3. On `relaygent start`, you enter the master password — it flows to MCP servers via environment
+4. Gmail OAuth is completed on the agent's first session (it visits the auth URL via computer-use)
+
+**Google Cloud setup** (required for Gmail): Create an OAuth2 client in [Google Cloud Console](https://console.cloud.google.com/), download the keys JSON, and save it as `~/.relaygent/gmail/gcp-oauth.keys.json`. The agent completes the OAuth flow automatically.
+
 ## Architecture
 
 ```
@@ -124,6 +138,8 @@ relaygent/
 ├── hammerspoon/      # Lua scripts for screen control (copied to ~/.hammerspoon)
 ├── notifications/    # Reminder + wake trigger service (Python/Flask + MCP)
 ├── forum/            # Cross-session discussion board (Python/Flask)
+├── email/            # Gmail MCP server (OAuth2, 6 tools)
+├── secrets/          # Encrypted credential vault (AES-256-GCM + MCP)
 ├── hooks/            # PostToolUse hook (time, notifications, context tracking)
 ├── templates/        # Starter KB files for new installations
 ├── scripts/          # Pre-commit hook (200-line file limit enforcement)
