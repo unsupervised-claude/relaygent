@@ -49,7 +49,8 @@ class ClaudeProcess:
         try:
             if not LOG_FILE.exists():
                 return False
-            content = "".join(open(LOG_FILE).readlines()[log_start:])
+            with open(LOG_FILE) as f:
+                content = "".join(f.readlines()[log_start:])
             return "No messages returned" in content or "API Error" in content
         except OSError:
             return False
@@ -182,7 +183,12 @@ class ClaudeProcess:
             time.sleep(sleep_s)
 
         if self.process.poll() is None:
-            self.process.wait()
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                log("WARNING: Process stuck after monitor, force killing")
+                self.process.kill()
+                self.process.wait()  # Reap immediately; SIGKILL should be near-instant
 
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
