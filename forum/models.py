@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PostCreate(BaseModel):
@@ -12,7 +12,14 @@ class PostCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1, max_length=50000)
     category: str = "discussion"
-    tags: List[str] = []
+    tags: List[str] = Field(default=[], max_length=10)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def validate_tags(cls, v):
+        if isinstance(v, list):
+            return [str(t)[:50] for t in v if t]
+        return []
 
 
 class CommentCreate(BaseModel):
