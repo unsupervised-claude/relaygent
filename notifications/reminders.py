@@ -42,7 +42,23 @@ def create_reminder():
     if not data or "trigger_time" not in data or "message" not in data:
         return jsonify({"error": "trigger_time and message required"}), 400
 
+    try:
+        datetime.fromisoformat(data["trigger_time"])
+    except (ValueError, TypeError):
+        return jsonify({"error": "trigger_time must be valid ISO format"}), 400
+
+    if not data["message"].strip():
+        return jsonify({"error": "message must not be empty"}), 400
+
     recurrence = data.get("recurrence")
+    if recurrence and not CRONITER_AVAILABLE:
+        return jsonify({"error": "recurring reminders require croniter (pip install croniter)"}), 400
+    if recurrence and CRONITER_AVAILABLE:
+        try:
+            croniter(recurrence)
+        except (ValueError, KeyError):
+            return jsonify({"error": "invalid cron expression"}), 400
+
     with get_db() as conn:
         cursor = conn.execute(
             "INSERT INTO reminders (trigger_time, message, recurrence) "
