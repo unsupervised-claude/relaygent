@@ -56,6 +56,7 @@ async def list_posts(
     limit: int = 50,
 ):
     """List posts with optional filtering."""
+    limit = max(1, min(limit, 200))
     with get_db() as conn:
         query = "SELECT * FROM posts"
         conditions = []
@@ -63,6 +64,9 @@ async def list_posts(
         if category:
             conditions.append("category = ?")
             params.append(category)
+        if tag:
+            conditions.append("tags LIKE ?")
+            params.append(f'%"{tag}"%')
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY created_at DESC LIMIT ?"
@@ -89,17 +93,17 @@ async def list_posts(
             posts.sort(key=lambda p: p.score, reverse=True)
         elif sort == "hot":
             now = datetime.now(timezone.utc)
-            for p in posts:
+
+            def hot_score(p):
                 created = datetime.fromisoformat(p.created_at)
                 if created.tzinfo is None:
                     created = created.replace(tzinfo=timezone.utc)
                 age_hours = max(
                     (now - created).total_seconds() / 3600, 1
                 )
-                p._hot_score = p.score / age_hours
-            posts.sort(
-                key=lambda p: getattr(p, "_hot_score", 0), reverse=True
-            )
+                return p.score / age_hours
+
+            posts.sort(key=hot_score, reverse=True)
     return posts
 
 
