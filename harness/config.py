@@ -39,7 +39,7 @@ def set_status(status: str) -> None:
 
 def get_workspace_dir() -> Path:
     """Create and return workspace directory for this run."""
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     workspace = RUNS_DIR / timestamp
     workspace.mkdir(parents=True, exist_ok=True)
     return workspace

@@ -127,6 +127,7 @@ def get_context_fill_from_jsonl(session_id: str, workspace: Path) -> float:
                     usage = entry.get("message", {}).get("usage", {})
                     if usage:
                         total = (usage.get("input_tokens", 0)
+                                + usage.get("output_tokens", 0)
                                 + usage.get("cache_creation_input_tokens", 0)
                                 + usage.get("cache_read_input_tokens", 0))
                         return total / CONTEXT_WINDOW * 100
