@@ -11,12 +11,17 @@ load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo -e "${RED}Not set up yet. Run: ./setup.sh${NC}"; exit 1
     fi
-    eval "$(python3 -c "
-import json,shlex;c=json.load(open('$CONFIG_FILE'));s=c['services']
-for k,v in[('HUB_PORT',c['hub']['port']),('FORUM_PORT',s['forum']['port']),
-('NOTIF_PORT',s['notifications']['port']),('HS_PORT',s.get('hammerspoon',{}).get('port',8097)),
-('DATA_DIR',c['paths']['data']),('KB_DIR',c['paths']['kb'])]:print(f'{k}={shlex.quote(str(v))}')
-")"
+    local config_vars
+    config_vars="$(python3 -c "
+import json,shlex,sys
+try:
+ c=json.load(open('$CONFIG_FILE'));s=c['services']
+ for k,v in[('HUB_PORT',c['hub']['port']),('FORUM_PORT',s['forum']['port']),
+  ('NOTIF_PORT',s['notifications']['port']),('HS_PORT',s.get('hammerspoon',{}).get('port',8097)),
+  ('DATA_DIR',c['paths']['data']),('KB_DIR',c['paths']['kb'])]:print(f'{k}={shlex.quote(str(v))}')
+except Exception: sys.exit(1)
+")" || { echo -e "${RED}Failed to parse $CONFIG_FILE. Re-run ./setup.sh${NC}"; exit 1; }
+    eval "$config_vars"
     export RELAYGENT_DATA_DIR="$DATA_DIR" RELAYGENT_KB_DIR="$KB_DIR" RELAYGENT_HUB_PORT="$HUB_PORT"
     export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
 }
@@ -156,20 +161,15 @@ do_stop() {
     stop_process "Notifications" "notifications"
     # Fallback: kill by port if pidfiles were lost
     for port_name in "${HUB_PORT:-8080}:Hub" "${FORUM_PORT:-8085}:Forum" "${NOTIF_PORT:-8083}:Notifications"; do
-        port="${port_name%%:*}"; name="${port_name##*:}"
-        pids=""
-        if command -v lsof &>/dev/null; then
-            pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null) || true
-        elif command -v ss &>/dev/null; then
-            pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}') || true
-        fi
-        [ -n "$pids" ] && kill $pids 2>/dev/null && \
-            echo -e "  $name orphan (port $port): ${YELLOW}killed${NC}" || true
+        local port="${port_name%%:*}" name="${port_name##*:}" pids=""
+        if command -v lsof &>/dev/null; then pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null) || true
+        elif command -v ss &>/dev/null; then pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}') || true; fi
+        [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  $name orphan (port $port): ${YELLOW}killed${NC}" || true
     done
     # Kill MCP servers and notification poller
     for pat in "mcp-chat\.mjs|mcp-server\.mjs" "notification-poller"; do
-        local pids; pids=$(pgrep -f "$pat" 2>/dev/null) || true
-        [ -n "$pids" ] && kill $pids 2>/dev/null || true
+        local mpids; mpids=$(pgrep -f "$pat" 2>/dev/null) || true
+        [ -n "$mpids" ] && kill $mpids 2>/dev/null || true
     done
     rm -f "$SCRIPT_DIR/harness/.relay.lock"
 }
