@@ -42,14 +42,26 @@ function renderWikiLinks(html) {
 	});
 }
 
+/** Recursively find all .md files under a directory */
+function findMarkdownFiles(dir, base = dir) {
+	let results = [];
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		const full = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			results = results.concat(findMarkdownFiles(full, base));
+		} else if (entry.name.endsWith('.md')) {
+			const rel = path.relative(base, full);
+			results.push({ filepath: full, slug: rel.replace(/\.md$/, '') });
+		}
+	}
+	return results;
+}
+
 /** Get all KB topics (metadata only) */
 export function listTopics() {
 	if (!fs.existsSync(KB_DIR)) return [];
-	return fs.readdirSync(KB_DIR)
-		.filter(f => f.endsWith('.md'))
-		.map(f => {
-			const slug = f.replace('.md', '');
-			const filepath = path.join(KB_DIR, f);
+	return findMarkdownFiles(KB_DIR)
+		.map(({ filepath, slug }) => {
 			try {
 				const { meta } = parseFile(filepath);
 				const mtime = fs.statSync(filepath).mtimeMs;
