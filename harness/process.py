@@ -196,8 +196,5 @@ class ClaudeProcess:
                     log("WARNING: Process did not die after kill")
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
-        return ClaudeResult(
-            exit_code=self.process.returncode or 0, hung=hung,
-            timed_out=timed_out, no_output=no_output,
-            incomplete=incomplete, context_pct=self.get_context_fill(),
-        )
+        return ClaudeResult(exit_code=self.process.returncode or 0, hung=hung, timed_out=timed_out,
+            no_output=no_output, incomplete=incomplete, context_pct=self.get_context_fill())

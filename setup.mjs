@@ -8,7 +8,7 @@ import { execSync, spawnSync } from 'child_process';
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync, appendFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
-import { setupHammerspoon, setupHooks, envFromConfig } from './setup-helpers.mjs';
+import { setupHammerspoon, setupHooks, setupSecrets, envFromConfig } from './setup-helpers.mjs';
 
 const REPO_DIR = process.argv[2] || resolve('.');
 const HOME = homedir();
@@ -51,6 +51,15 @@ async function main() {
 		rl.close();
 		process.exit(1);
 	}
+
+	// Secrets vault — encrypted credential storage
+	const masterPassword = (await ask(`${C.cyan}Master password (encrypts stored credentials):${C.reset} `)).trim();
+	if (!masterPassword) {
+		console.log(`${C.red}Master password required for credential vault.${C.reset}`);
+		rl.close();
+		process.exit(1);
+	}
+	const emailPassword = (await ask(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim();
 
 	const hubPort = 8080;
 
@@ -113,7 +122,7 @@ async function main() {
 	} catch { /* not a git repo yet, skip */ }
 
 	// Install Node.js dependencies
-	for (const sub of ['hub', 'notifications', 'computer-use']) {
+	for (const sub of ['hub', 'notifications', 'computer-use', 'email']) {
 		console.log(`  Installing ${sub} dependencies...`);
 		execSync('npm install', { cwd: join(REPO_DIR, sub), stdio: 'pipe' });
 		console.log(`  ${sub}: ${C.green}deps installed${C.reset}`);
@@ -137,6 +146,9 @@ async function main() {
 	console.log(`  Building hub...`);
 	execSync('npm run build', { cwd: join(REPO_DIR, 'hub'), stdio: 'pipe' });
 	console.log(`  Hub: ${C.green}built${C.reset}`);
+
+	// Create secrets vault and store credentials
+	await setupSecrets(REPO_DIR, masterPassword, emailPassword, C);
 
 	// Set up Hammerspoon (computer-use)
 	await setupHammerspoon(config, REPO_DIR, HOME, C, ask);

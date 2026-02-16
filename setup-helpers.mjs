@@ -2,6 +2,21 @@
 import { spawnSync } from 'child_process';
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
+import { pathToFileURL } from 'url';
+
+export async function setupSecrets(REPO_DIR, masterPassword, emailPassword, C) {
+	const { createVault, vaultExists, setSecret } = await import(pathToFileURL(join(REPO_DIR, 'secrets', 'vault.mjs')).href);
+	if (!vaultExists()) {
+		createVault(masterPassword);
+		console.log(`  Secrets vault: ${C.green}created${C.reset}`);
+	} else {
+		console.log(`  Secrets vault: ${C.green}exists${C.reset}`);
+	}
+	if (emailPassword) {
+		setSecret(masterPassword, 'email-password', emailPassword);
+		console.log(`  Secret stored: ${C.green}email-password${C.reset}`);
+	}
+}
 
 export function setupHammerspoon(config, REPO_DIR, HOME, C, ask) {
 	if (process.platform !== 'darwin') {
@@ -106,8 +121,16 @@ export function setupHooks(config, REPO_DIR, HOME, C) {
 		args: [join(REPO_DIR, 'computer-use', 'mcp-server.mjs')],
 		env: { HAMMERSPOON_PORT: String(config.services?.hammerspoon?.port || 8097) },
 	};
+	claudeConfig.mcpServers['secrets'] = {
+		command: 'node',
+		args: [join(REPO_DIR, 'secrets', 'mcp-server.mjs')],
+	};
+	claudeConfig.mcpServers['email'] = {
+		command: 'node',
+		args: [join(REPO_DIR, 'email', 'mcp-server.mjs')],
+	};
 	writeFileSync(claudeJson, JSON.stringify(claudeConfig, null, 2));
-	console.log(`  MCP: hub-chat + notifications + computer-use registered`);
+	console.log(`  MCP: hub-chat + notifications + computer-use + secrets + email registered`);
 }
 
 export function envFromConfig(config) {

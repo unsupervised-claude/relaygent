@@ -86,6 +86,12 @@ check_process() {
 
 do_start() {
     load_config
+    # Secrets vault — master password needed for MCP servers
+    if [ -f "$HOME/.relaygent/secrets.enc" ] && [ -z "${RELAYGENT_MASTER_PASSWORD:-}" ]; then
+        echo -ne "${CYAN}Master password:${NC} "
+        read -rs RELAYGENT_MASTER_PASSWORD; echo
+        export RELAYGENT_MASTER_PASSWORD
+    fi
     echo -e "${CYAN}Starting Relaygent...${NC}"
     local port_ok=true
     check_port "$HUB_PORT" "Hub" || port_ok=false
@@ -150,28 +156,22 @@ do_start() {
         start_service "Relay" "relay" \
             python3 "$SCRIPT_DIR/harness/relay.py"
     fi
-    echo -e "\n  Dashboard: ${CYAN}http://localhost:$HUB_PORT/${NC}"
-    echo -e "  Logs:      $SCRIPT_DIR/logs/\n"
+    echo -e "\n  Dashboard: ${CYAN}http://localhost:$HUB_PORT/${NC}\n  Logs: $SCRIPT_DIR/logs/\n"
 }
 
 do_stop() {
     load_config 2>/dev/null || true
     echo -e "${CYAN}Stopping Relaygent...${NC}"
     stop_process "Relay" "relay"
-    # Kill any orphaned claude subprocesses spawned by the relay
     local claude_pids; claude_pids=$(pgrep -f "claude.*--print.*--session-id" 2>/dev/null) || true
-    [ -n "$claude_pids" ] && kill -TERM $claude_pids 2>/dev/null && \
-        echo -e "  Claude processes: ${YELLOW}cleaned up${NC}" || true
-    stop_process "Computer-use" "computer-use"
-    stop_process "Hub" "hub"
-    stop_process "Forum" "forum"
-    stop_process "Notifications" "notifications"
-    # Fallback: kill orphans by port
+    [ -n "$claude_pids" ] && kill -TERM $claude_pids 2>/dev/null && echo -e "  Claude: ${YELLOW}cleaned up${NC}" || true
+    for svc in Computer-use:computer-use Hub:hub Forum:forum Notifications:notifications; do
+        stop_process "${svc%%:*}" "${svc##*:}"
+    done
     for pn in "${HUB_PORT:-8080}:Hub" "${FORUM_PORT:-8085}:Forum" "${NOTIF_PORT:-8083}:Notifications"; do
         local pids; pids=$(port_pids "${pn%%:*}") || true
         [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  ${pn##*:} orphan: ${YELLOW}killed${NC}" || true
     done
-    # Kill MCP servers and notification poller
     local mpids; mpids=$(pgrep -f "mcp-chat\.mjs|mcp-server\.mjs|notification-poller" 2>/dev/null) || true
     [ -n "$mpids" ] && kill $mpids 2>/dev/null || true
     rm -f "$SCRIPT_DIR/harness/.relay.lock"
