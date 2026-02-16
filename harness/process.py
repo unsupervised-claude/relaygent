@@ -92,6 +92,7 @@ class ClaudeProcess:
         self._close_log()
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         return open(LOG_FILE, "a")
+
     def start_fresh(self) -> int:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
@@ -112,6 +113,7 @@ class ClaudeProcess:
             self._close_log()
             raise
         return log_start
+
     def resume(self, message: str) -> int:
         self._terminate()
         log_start = self._get_log_lines()
@@ -186,6 +188,7 @@ class ClaudeProcess:
             except subprocess.TimeoutExpired:
                 log("WARNING: Process stuck after monitor, force killing")
                 self.process.kill()
+                self.process.wait()  # Reap immediately; SIGKILL should be near-instant
 
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
