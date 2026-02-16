@@ -33,7 +33,7 @@ if [ "$NODE_VERSION" -lt 20 ]; then
     exit 1
 fi
 
-# Check Python 3
+# Check Python 3.9+
 if ! command -v python3 &>/dev/null; then
     echo -e "${RED}Python 3 is required but not installed.${NC}"
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -41,6 +41,12 @@ if ! command -v python3 &>/dev/null; then
     else
         echo "Install via:  sudo apt-get install -y python3 python3-venv"
     fi
+    exit 1
+fi
+
+PY_VERSION=$(python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
+if [ "$PY_VERSION" -lt 9 ]; then
+    echo -e "${RED}Python 3.9+ required (found $(python3 --version 2>&1))${NC}"
     exit 1
 fi
 
