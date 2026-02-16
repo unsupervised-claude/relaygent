@@ -69,7 +69,7 @@ class RelayRunner:
                 log(f"Crashed during wake (exit={claude_result.exit_code}), resuming...")
                 time.sleep(3)
                 log_start = claude.resume("You crashed and were resumed. Continue where you left off.")
-                claude.monitor(log_start)
+                claude_result = claude.monitor(log_start)
             if claude_result.context_pct >= CONTEXT_THRESHOLD:
                 return claude_result
 

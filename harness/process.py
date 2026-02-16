@@ -40,27 +40,21 @@ class ClaudeProcess:
         self._context_warning_sent = False
 
     def _get_log_lines(self) -> int:
-        if not LOG_FILE.exists():
-            return 0
         try:
-            with open(LOG_FILE) as f:
-                return sum(1 for _ in f)
+            return sum(1 for _ in open(LOG_FILE)) if LOG_FILE.exists() else 0
         except OSError:
             return 0
 
     def _check_for_hang(self, log_start: int) -> bool:
-        if not LOG_FILE.exists():
-            return False
         try:
-            with open(LOG_FILE) as f:
-                lines = f.readlines()[log_start:]
-            content = "".join(lines)
+            if not LOG_FILE.exists():
+                return False
+            content = "".join(open(LOG_FILE).readlines()[log_start:])
             return "No messages returned" in content or "API Error" in content
         except OSError:
             return False
 
     def get_context_fill(self) -> float:
-        """Get current context window fill percentage."""
         try:
             if CONTEXT_PCT_FILE.exists():
                 pct = float(CONTEXT_PCT_FILE.read_text().strip())
@@ -71,25 +65,30 @@ class ClaudeProcess:
         return get_context_fill_from_jsonl(self.session_id, self.workspace)
 
     def _terminate(self) -> None:
-        if self.process and self.process.poll() is None:
-            log("Terminating Claude process...")
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-                log("Process terminated gracefully")
-                return
-            except subprocess.TimeoutExpired:
-                pass
-            log("Graceful terminate failed, killing...")
-            self.process.kill()
-            try:
-                self.process.wait(timeout=10)
-                log("Process killed successfully")
-            except subprocess.TimeoutExpired:
-                log("WARNING: Process did not die after kill, abandoning")
-                self.process = None
+        if not self.process or self.process.poll() is not None:
+            return
+        log("Terminating Claude process...")
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=5)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        log("Graceful terminate failed, killing...")
+        self.process.kill()
+        try:
+            self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            log("WARNING: Process did not die after kill")
+            self.process = None
+
+    def _close_log(self):
+        if self._log_file and not self._log_file.closed:
+            self._log_file.close()
+        self._log_file = None
 
     def _open_log(self):
+        self._close_log()
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         return open(LOG_FILE, "a")
 
@@ -97,17 +96,21 @@ class ClaudeProcess:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
         settings_file = str(Path(__file__).parent / "settings.json")
-        with open(PROMPT_FILE) as stdin:
-            self.process = subprocess.Popen(
-                ["claude",
-                 "--print", "--dangerously-skip-permissions",
-                 "--settings", settings_file,
-                 "--session-id", self.session_id],
-                stdin=stdin,
-                stdout=self._log_file,
-                stderr=subprocess.STDOUT,
-                cwd=str(self.workspace),
-            )
+        try:
+            with open(PROMPT_FILE) as stdin:
+                self.process = subprocess.Popen(
+                    ["claude",
+                     "--print", "--dangerously-skip-permissions",
+                     "--settings", settings_file,
+                     "--session-id", self.session_id],
+                    stdin=stdin,
+                    stdout=self._log_file,
+                    stderr=subprocess.STDOUT,
+                    cwd=str(self.workspace),
+                )
+        except OSError:
+            self._close_log()
+            raise
         return log_start
 
     def resume(self, message: str) -> int:
@@ -115,16 +118,20 @@ class ClaudeProcess:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
         settings_file = str(Path(__file__).parent / "settings.json")
-        self.process = subprocess.Popen(
-            ["claude",
-             "--resume", self.session_id,
-             "--print", "--dangerously-skip-permissions",
-             "--settings", settings_file],
-            stdin=subprocess.PIPE,
-            stdout=self._log_file,
-            stderr=subprocess.STDOUT,
-            cwd=str(self.workspace),
-        )
+        try:
+            self.process = subprocess.Popen(
+                ["claude",
+                 "--resume", self.session_id,
+                 "--print", "--dangerously-skip-permissions",
+                 "--settings", settings_file],
+                stdin=subprocess.PIPE,
+                stdout=self._log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(self.workspace),
+            )
+        except OSError:
+            self._close_log()
+            raise
         self.process.stdin.write(message.encode())
         self.process.stdin.close()
         return log_start
@@ -132,13 +139,9 @@ class ClaudeProcess:
     def monitor(self, log_start: int) -> ClaudeResult:
         """Monitor process with hang detection. Blocks until process exits."""
         attempt_start = time.time()
-        hang_checked = False
-        hung = False
-        timed_out = False
-
+        hung, timed_out, last_hang_check = False, False, 0.0
         initial_jsonl_size = get_jsonl_size(self.session_id, self.workspace)
-        last_jsonl_size = initial_jsonl_size
-        last_activity_time = time.time()
+        last_jsonl_size, last_activity_time = initial_jsonl_size, time.time()
 
         while self.process.poll() is None:
             attempt_elapsed = time.time() - attempt_start
@@ -149,8 +152,9 @@ class ClaudeProcess:
                 timed_out = True
                 break
 
-            if not hang_checked and attempt_elapsed >= HANG_CHECK_DELAY:
-                hang_checked = True
+            if (attempt_elapsed >= HANG_CHECK_DELAY
+                    and attempt_elapsed - last_hang_check >= HANG_CHECK_DELAY):
+                last_hang_check = attempt_elapsed
                 if self._check_for_hang(log_start):
                     log("Hang detected (error pattern), killing...")
                     hung = True
@@ -174,26 +178,16 @@ class ClaudeProcess:
                     self._context_warning_sent = True
 
             remaining = self.timer.remaining()
-            if remaining <= 60:
-                time.sleep(1)
-            elif remaining <= 300:
-                time.sleep(5)
-            else:
-                time.sleep(30)
+            sleep_s = 1 if remaining <= 60 else (5 if remaining <= 300 else 30)
+            time.sleep(sleep_s)
 
         if self.process.poll() is None:
             self.process.wait()
 
-        final_jsonl_size = get_jsonl_size(self.session_id, self.workspace)
-        no_output = (final_jsonl_size == initial_jsonl_size)
+        no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
-        final_context = self.get_context_fill()
-
         return ClaudeResult(
-            exit_code=self.process.returncode or 0,
-            hung=hung,
-            timed_out=timed_out,
-            no_output=no_output,
-            incomplete=incomplete,
-            context_pct=final_context,
+            exit_code=self.process.returncode or 0, hung=hung,
+            timed_out=timed_out, no_output=no_output,
+            incomplete=incomplete, context_pct=self.get_context_fill(),
         )
