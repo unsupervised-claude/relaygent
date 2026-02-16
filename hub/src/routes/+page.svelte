@@ -4,6 +4,7 @@
 	import ContextBar from '$lib/components/ContextBar.svelte';
 	import ActivityFeed from '$lib/components/ActivityFeed.svelte';
 	import ScreenStream from '$lib/components/ScreenStream.svelte';
+	import { sanitizeHtml } from '$lib/sanitize.js';
 
 	let { data } = $props();
 	let screenOpen = $state(false);
@@ -110,7 +111,7 @@
 <section class="attention">
 	<div class="att-hdr"><h3>Attention</h3><button class="clear-all" onclick={clearAllAttention}>Clear</button></div>
 	{#each attentionItems as item, i}
-		<div class="att-item"><span>{@html item}</span><button class="x" onclick={() => clearAttentionItem(i)}>x</button></div>
+		<div class="att-item"><span>{@html sanitizeHtml(item)}</span><button class="x" onclick={() => clearAttentionItem(i)}>x</button></div>
 	{/each}
 </section>
 {/if}
