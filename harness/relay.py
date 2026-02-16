@@ -7,6 +7,9 @@ import time
 import uuid
 from pathlib import Path
 
+# Ensure sibling modules are importable regardless of CWD
+sys.path.insert(0, str(Path(__file__).parent))
+
 from config import (
     CONTEXT_THRESHOLD,
     HANG_CHECK_DELAY,
