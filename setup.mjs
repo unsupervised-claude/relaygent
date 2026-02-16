@@ -102,11 +102,20 @@ async function main() {
 		console.log(`  Git hooks: ${C.green}200-line pre-commit enabled${C.reset}`);
 	} catch { /* not a git repo yet, skip */ }
 
-	// Install dependencies for all Node.js components
+	// Install Node.js dependencies
 	for (const sub of ['hub', 'notifications', 'computer-use']) {
 		console.log(`  Installing ${sub} dependencies...`);
 		execSync('npm install', { cwd: join(REPO_DIR, sub), stdio: 'pipe' });
 		console.log(`  ${sub}: ${C.green}deps installed${C.reset}`);
+	}
+	// Install Python dependencies (forum + notifications Flask servers)
+	for (const sub of ['forum', 'notifications']) {
+		const dir = join(REPO_DIR, sub);
+		const venv = join(dir, '.venv');
+		console.log(`  Setting up ${sub} Python venv...`);
+		execSync(`python3 -m venv "${venv}" && "${venv}/bin/pip" install -q -r requirements.txt`,
+			{ cwd: dir, stdio: 'pipe' });
+		console.log(`  ${sub}: ${C.green}venv ready${C.reset}`);
 	}
 	console.log(`  Building hub...`);
 	execSync('npm run build', { cwd: join(REPO_DIR, 'hub'), stdio: 'pipe' });
