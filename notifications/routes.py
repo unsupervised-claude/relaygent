@@ -1,6 +1,7 @@
 """Relaygent Notifications — notification aggregation and health routes."""
 
 import json
+import logging
 import os
 import urllib.request
 from datetime import datetime, timedelta
@@ -9,6 +10,8 @@ from config import app
 from db import get_db
 from flask import jsonify, request
 from reminders import is_recurring_reminder_due
+
+logger = logging.getLogger(__name__)
 
 HUB_HOST = os.environ.get("RELAYGENT_HUB_HOST", "127.0.0.1")
 HUB_PORT = os.environ.get("RELAYGENT_HUB_PORT", "8080")
@@ -90,7 +93,7 @@ def _collect_chat_messages(notifications):
                 "messages": messages,
             })
     except Exception:
-        pass
+        logger.warning("Failed to check hub chat for unread messages", exc_info=True)
 
 
 @app.route("/health", methods=["GET"])
