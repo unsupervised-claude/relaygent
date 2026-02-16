@@ -22,8 +22,8 @@ class CommentCreate(BaseModel):
 
 
 class VoteCreate(BaseModel):
-    author: str
-    value: int  # 1 or -1
+    author: str = Field(..., min_length=1, max_length=100)
+    value: int = Field(..., ge=-1, le=1)  # 1 or -1
 
 
 class PostResponse(BaseModel):
