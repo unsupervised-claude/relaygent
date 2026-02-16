@@ -1,6 +1,6 @@
 # Relaygent
 
-An autonomous AI agent that runs continuously on your Mac (or its on Mac Mini). It can see your screen, click, type, read and write files, run commands, and hand off to itself indefinitely — no human in the loop required.
+An autonomous AI agent that runs continuously on your Mac or Linux machine. It can see your screen, click, type, read and write files, run commands, and hand off to itself indefinitely — no human in the loop required.
 
 Built as a wrapper around [Claude Code](https://docs.anthropic.com/en/docs/claude-code). When one session fills its context window, it writes a detailed briefing and a fresh session picks up exactly where it left off. The result is an agent that runs for hours, days, or weeks — building software, managing systems, and evolving its own knowledge base over time.
 
@@ -31,7 +31,7 @@ Open `http://localhost:8080` to watch your agent work.
 
 **Runs autonomously.** The relay harness starts a Claude Code session, monitors it, and when context fills to ~85%, the agent writes a handoff and a successor session continues seamlessly. No manual intervention needed.
 
-**Controls your Mac.** Via Hammerspoon, the agent can take screenshots, click buttons, type text, scroll, read accessibility trees, launch apps, and navigate Chrome. You can watch it live on the dashboard.
+**Controls your screen.** The agent can take screenshots, click buttons, type text, scroll, read accessibility trees, launch apps, and navigate browsers. On macOS this uses Hammerspoon; on Linux it uses xdotool, scrot, and AT-SPI2. You can watch it live on the dashboard.
 
 **Remembers everything.** A git-tracked knowledge base persists across sessions. The agent reads its predecessor's notes, updates them, and leaves better ones for the next session. Topics link together with wiki-links.
 
@@ -41,12 +41,14 @@ Open `http://localhost:8080` to watch your agent work.
 
 ## Requirements
 
-- **macOS** (computer-use requires Hammerspoon, which is macOS-only)
+- **macOS or Linux** (Ubuntu 22.04+ recommended for Linux)
 - **Node.js 20+**
 - **Python 3.9+**
 - **Claude Code** (`npm install -g @anthropic-ai/claude-code`) with an active subscription
 
-Setup will install Hammerspoon via Homebrew if needed and guide you through granting the required macOS permissions (Accessibility + Screen Recording).
+**macOS extras:** Hammerspoon (setup installs it via Homebrew and guides you through Accessibility + Screen Recording permissions).
+
+**Linux extras:** `sudo apt install xdotool scrot wmctrl imagemagick python3-pyatspi at-spi2-core`
 
 ## The Dashboard
 
@@ -84,14 +86,16 @@ When the agent sleeps, the harness takes over: it polls for pending notification
 
 ## Computer Use
 
-The agent interacts with your Mac through 19 Hammerspoon-backed MCP tools:
+The agent interacts with your screen through 19 MCP tools:
 
 - **Screenshots** — full screen or cropped regions, returned as inline images
 - **Click / Type / Scroll** — precise input events with modifier key support
 - **Accessibility tree** — find UI elements by role or title, click them programmatically
 - **App management** — launch, focus, and list windows
-- **Browser** — navigate Chrome to URLs
-- **AppleScript** — run arbitrary AppleScript for deeper macOS integration
+- **Browser** — navigate to URLs
+- **AppleScript** — run arbitrary AppleScript (macOS only)
+
+On macOS, these are backed by Hammerspoon. On Linux, they use xdotool (input), scrot + ImageMagick (screenshots), wmctrl (windows), and pyatspi2 (accessibility). The MCP server is the same on both — it talks to a platform-specific HTTP backend on port 8097.
 
 Every action auto-returns a screenshot so the agent sees the result immediately.
 
