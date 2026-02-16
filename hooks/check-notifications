@@ -1,0 +1,74 @@
+#!/bin/bash
+# Relaygent PostToolUse hook: shows current time + checks cached notifications + context tracking
+# Reads from cache files maintained by notification-poller daemon (no HTTP calls = instant)
+
+CACHE_FILE="/tmp/relaygent-notifications-cache.json"
+
+# Ensure notification-poller is running
+POLLER_SCRIPT="$(dirname "$0")/notification-poller"
+if ! pgrep -f "relaygent.*notification-poller" &>/dev/null; then
+    if [[ -x "$POLLER_SCRIPT" ]]; then
+        nohup "$POLLER_SCRIPT" &>/dev/null &
+        disown
+    fi
+fi
+
+# Build context string: always include time
+TIME=$(date '+%H:%M:%S %Z')
+CTX="Current time: $TIME"
+
+# Read cached notifications and extract reminders + chat messages
+NOTIF_INFO=$(python3 -c "
+import json
+try:
+    data = json.load(open('$CACHE_FILE'))
+    parts = []
+    for n in data:
+        if n.get('type') == 'reminder':
+            parts.append('REMINDER DUE: \"' + n.get('message', '') + '\"')
+        elif n.get('type') == 'message':
+            count = n.get('count', 0)
+            parts.append(f'{count} unread chat message(s) — check with read_messages')
+    if parts:
+        print(' | '.join(parts))
+except: pass
+" 2>/dev/null)
+if [[ -n "$NOTIF_INFO" ]]; then
+    CTX="$CTX | $NOTIF_INFO"
+fi
+
+# Context fill % — check directly from JSONL (runs every tool call, no polling delay)
+CONTEXT_PCT_FILE="/tmp/relaygent-context-pct"
+CONTEXT_THRESHOLD=85
+# Find most recent JSONL from our harness runs (scoped via config.json repo path)
+REPO_PATH=$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/.relaygent/config.json')))['paths']['repo'])" 2>/dev/null)
+if [[ -n "$REPO_PATH" ]]; then
+    RUNS_PREFIX=$(echo "${REPO_PATH}/harness/runs" | sed 's|/|-|g')
+    LATEST_JSONL=$(ls -t ~/.claude/projects/${RUNS_PREFIX}*/*.jsonl 2>/dev/null | head -1)
+fi
+if [[ -n "$LATEST_JSONL" ]]; then
+    FILL_PCT=$(tail -c 8192 "$LATEST_JSONL" 2>/dev/null | python3 -c "
+import sys, json
+data = sys.stdin.buffer.read().decode('utf-8', errors='ignore')
+for line in reversed(data.strip().split(chr(10))):
+    try:
+        entry = json.loads(line)
+        if entry.get('type') == 'assistant':
+            usage = entry.get('message', {}).get('usage', {})
+            if usage:
+                total = usage.get('input_tokens', 0) + usage.get('cache_creation_input_tokens', 0) + usage.get('cache_read_input_tokens', 0)
+                print(int(total / 200000 * 100))
+                break
+    except: continue
+" 2>/dev/null)
+    if [[ -n "$FILL_PCT" ]]; then
+        echo "$FILL_PCT" > "$CONTEXT_PCT_FILE"
+        if [[ "$FILL_PCT" -ge "$CONTEXT_THRESHOLD" ]]; then
+            CTX="$CTX | CONTEXT ${FILL_PCT}% — Wrap up: rewrite handoff.md, update working-state.md, commit KB, then stop."
+        fi
+    fi
+fi
+
+export _HOOK_CTX="$CTX"
+python3 -c "import json,os; print(json.dumps({'hookSpecificOutput':{'hookEventName':'PostToolUse','additionalContext':os.environ['_HOOK_CTX']}}))"
+

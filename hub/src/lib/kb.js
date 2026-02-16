@@ -1,0 +1,155 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import matter from 'gray-matter';
+import { marked } from 'marked';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_DIR = path.join(__dirname, '..', '..', '..');
+const KB_DIR = process.env.RELAYGENT_KB_DIR || path.join(REPO_DIR, 'knowledge', 'topics');
+
+/** Get the KB directory path (for use by other modules) */
+export function getKbDir() { return KB_DIR; }
+const FORUM_PORT = process.env.RELAYGENT_FORUM_PORT || '8085';
+
+/** Validate a slug resolves within KB_DIR (prevent path traversal) */
+function safeSlugPath(slug) {
+	const filepath = path.join(KB_DIR, `${slug}.md`);
+	const resolved = path.resolve(filepath);
+	if (!resolved.startsWith(path.resolve(KB_DIR))) {
+		throw new Error('Invalid slug');
+	}
+	return filepath;
+}
+
+/** Parse a markdown file with frontmatter */
+function parseFile(filepath) {
+	const raw = fs.readFileSync(filepath, 'utf-8');
+	const { data, content } = matter(raw);
+	for (const key of Object.keys(data)) {
+		if (data[key] instanceof Date) data[key] = data[key].toISOString().split('T')[0];
+	}
+	return { meta: data, content };
+}
+
+/** Convert wiki-links [[topic]] and [[slug|display]] to HTML links */
+function renderWikiLinks(html) {
+	return html.replace(/\[\[([^\]]+)\]\]/g, (_, inner) => {
+		const parts = inner.split('|');
+		const slug = parts[0].toLowerCase().replace(/\s+/g, '-');
+		const display = parts.length > 1 ? parts[1] : parts[0];
+		return `<a href="/kb/${slug}" class="wiki-link">${display}</a>`;
+	});
+}
+
+/** Get all KB topics (metadata only) */
+export function listTopics() {
+	if (!fs.existsSync(KB_DIR)) return [];
+	return fs.readdirSync(KB_DIR)
+		.filter(f => f.endsWith('.md'))
+		.map(f => {
+			const slug = f.replace('.md', '');
+			const filepath = path.join(KB_DIR, f);
+			try {
+				const { meta } = parseFile(filepath);
+				const mtime = fs.statSync(filepath).mtimeMs;
+				return { slug, mtime, ...meta };
+			} catch {
+				return { slug, mtime: 0, title: slug };
+			}
+		})
+		.sort((a, b) => {
+			const dateA = a.updated || a.created || '';
+			const dateB = b.updated || b.created || '';
+			if (dateA !== dateB) return dateB.localeCompare(dateA);
+			return b.mtime - a.mtime;
+		});
+}
+
+/** Get a single KB topic with rendered HTML */
+export function getTopic(slug) {
+	const filepath = safeSlugPath(slug);
+	if (!fs.existsSync(filepath)) return null;
+	const { meta, content } = parseFile(filepath);
+	const html = renderWikiLinks(marked(content));
+	const allFiles = fs.readdirSync(KB_DIR).filter(f => f.endsWith('.md') && f !== `${slug}.md`);
+	const backlinks = allFiles.filter(f => {
+		const raw = fs.readFileSync(path.join(KB_DIR, f), 'utf-8');
+		return raw.includes(`[[${slug}]]`) || raw.includes(`[[${slug}|`) || raw.includes(`[[${meta.title}]]`);
+	}).map(f => {
+		const s = f.replace('.md', '');
+		try {
+			const { meta: m } = parseFile(path.join(KB_DIR, f));
+			return { slug: s, title: m.title || s };
+		} catch {
+			return { slug: s, title: s };
+		}
+	});
+	return { slug, ...meta, html, backlinks };
+}
+
+/** Save a KB topic */
+export function saveTopic(slug, frontmatter, content) {
+	const filepath = safeSlugPath(slug);
+	const fm = { ...frontmatter, updated: new Date().toISOString().split('T')[0] };
+	const raw = matter.stringify(content, fm);
+	fs.writeFileSync(filepath, raw);
+}
+
+/** Search KB topics */
+export function searchTopics(query) {
+	if (!query) return [];
+	const q = query.toLowerCase();
+	return listTopics().map(t => {
+		const filepath = path.join(KB_DIR, `${t.slug}.md`);
+		const raw = fs.readFileSync(filepath, 'utf-8');
+		const lower = raw.toLowerCase();
+		const idx = lower.indexOf(q);
+		if (idx === -1) return null;
+		const contentStart = raw.indexOf('---', 3);
+		const content = contentStart > -1 ? raw.slice(contentStart + 3) : raw;
+		const cLower = content.toLowerCase();
+		const cIdx = cLower.indexOf(q);
+		let snippet = '';
+		if (cIdx > -1) {
+			const start = Math.max(0, cIdx - 60);
+			const end = Math.min(content.length, cIdx + q.length + 60);
+			snippet = (start > 0 ? '...' : '') + content.slice(start, end).replace(/\n/g, ' ').trim() + (end < content.length ? '...' : '');
+		}
+		return { ...t, type: 'topic', snippet };
+	}).filter(Boolean);
+}
+
+/** Search forum posts */
+export async function searchForum(query) {
+	if (!query) return [];
+	const q = query.toLowerCase();
+	try {
+		const res = await fetch(`http://localhost:${FORUM_PORT}/posts?limit=100`);
+		if (!res.ok) return [];
+		const posts = await res.json();
+		return posts.filter(p => {
+			const searchText = `${p.title} ${p.content} ${p.author}`.toLowerCase();
+			return searchText.includes(q);
+		}).map(p => {
+			const content = p.content;
+			const cLower = content.toLowerCase();
+			const cIdx = cLower.indexOf(q);
+			let snippet = '';
+			if (cIdx > -1) {
+				const start = Math.max(0, cIdx - 60);
+				const end = Math.min(content.length, cIdx + q.length + 60);
+				snippet = (start > 0 ? '...' : '') + content.slice(start, end).replace(/\n/g, ' ').trim() + (end < content.length ? '...' : '');
+			} else {
+				snippet = content.slice(0, 120).replace(/\n/g, ' ').trim() + '...';
+			}
+			return {
+				id: p.id, title: p.title, author: p.author,
+				category: p.category, created_at: p.created_at,
+				type: 'forum', snippet
+			};
+		});
+	} catch {
+		return [];
+	}
+}

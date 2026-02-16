@@ -1,0 +1,24 @@
+#!/bin/bash
+# Relaygent background notification poller daemon
+# Polls the notifications API every 1s and caches results to a temp file.
+# The check-notifications hook reads this cache instead of making HTTP calls.
+#
+# Usage: notification-poller &
+
+NOTIFICATIONS_PORT="${RELAYGENT_NOTIFICATIONS_PORT:-$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/.relaygent/config.json')))['services']['notifications']['port'])" 2>/dev/null || echo 8083)}"
+CACHE_FILE="/tmp/relaygent-notifications-cache.json"
+NOTIFY_API="http://localhost:${NOTIFICATIONS_PORT}/notifications/pending"
+POLL_INTERVAL=1
+
+# Write empty cache on start
+echo '[]' > "$CACHE_FILE"
+
+while true; do
+    # Poll notifications (fast mode — DB only, skip slow checks)
+    RESULT=$(curl -s --max-time 3 "${NOTIFY_API}?fast=1" 2>/dev/null)
+    if [[ -n "$RESULT" ]]; then
+        echo "$RESULT" > "${CACHE_FILE}.tmp" && mv "${CACHE_FILE}.tmp" "$CACHE_FILE"
+    fi
+
+    sleep "$POLL_INTERVAL"
+done

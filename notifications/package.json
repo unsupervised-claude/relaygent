@@ -1,0 +1,9 @@
+{
+  "name": "relaygent-notifications-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "mcp-server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

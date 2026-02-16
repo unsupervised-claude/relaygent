@@ -1,0 +1,6 @@
+#!/bin/bash
+# Git pre-commit hook: enforce 200-line limit on all source files.
+# Install: git config core.hooksPath scripts
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/check-file-length.sh" 200
