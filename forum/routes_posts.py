@@ -91,6 +91,8 @@ async def list_posts(
             now = datetime.now(timezone.utc)
             for p in posts:
                 created = datetime.fromisoformat(p.created_at)
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
                 age_hours = max(
                     (now - created).total_seconds() / 3600, 1
                 )
