@@ -97,8 +97,12 @@ def fire_reminder(reminder_id):
         return jsonify({"status": "fired"})
 
 
-def is_recurring_reminder_due(recurrence, last_trigger_time, window_minutes=5):
+def is_recurring_reminder_due(recurrence, last_trigger_time):
     """Check if recurring reminder should fire now.
+
+    Compares most recent cron occurrence against last_trigger_time.
+    If the last occurrence is newer than when we last fired, it's due.
+    No time window — reminders can't be missed due to polling gaps.
 
     Returns (is_due, prev_occurrence_iso).
     """
@@ -109,10 +113,7 @@ def is_recurring_reminder_due(recurrence, last_trigger_time, window_minutes=5):
     cron = croniter(recurrence, now)
     prev_occurrence = cron.get_prev(datetime)
 
-    minutes_since = (now - prev_occurrence).total_seconds() / 60
-    if minutes_since > window_minutes:
-        return False, ""
-
+    # Only fire if this occurrence hasn't been fired yet
     if last_trigger_time:
         last_trigger_dt = datetime.fromisoformat(last_trigger_time)
         if last_trigger_dt >= prev_occurrence:
