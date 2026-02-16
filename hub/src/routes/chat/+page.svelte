@@ -44,19 +44,26 @@
 		if (chatEl && chatEl.scrollTop < 80) loadOlder();
 	}
 
+	let reconnectDelay = 1000;
 	function connect() {
 		if (!browser) return;
 		const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 		ws = new WebSocket(`${proto}//${window.location.host}/ws/chat`);
+		ws.onopen = () => { reconnectDelay = 1000; };
 		ws.onmessage = async (event) => {
-			const msg = JSON.parse(event.data);
-			if (msg.type === 'message') {
-				messages = [...messages, msg.data];
-				await tick();
-				scrollToBottom();
-			}
+			try {
+				const msg = JSON.parse(event.data);
+				if (msg.type === 'message') {
+					messages = [...messages, msg.data];
+					await tick();
+					scrollToBottom();
+				}
+			} catch { /* ignore malformed messages */ }
 		};
-		ws.onclose = () => { setTimeout(connect, 3000); };
+		ws.onclose = () => {
+			setTimeout(connect, reconnectDelay);
+			reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+		};
 	}
 
 	function scrollToBottom() {
