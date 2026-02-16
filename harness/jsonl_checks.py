@@ -38,15 +38,19 @@ def get_jsonl_size(session_id: str, workspace: Path) -> int:
 
 
 def _read_tail(jsonl: Path, bytes_count: int = 65536) -> list[str]:
-    """Read last N bytes of a JSONL file and return lines."""
+    """Read last N bytes of a JSONL file and return complete lines."""
     try:
         with open(jsonl, 'rb') as f:
             f.seek(0, 2)
             size = f.tell()
             if size == 0:
                 return []
-            f.seek(max(0, size - bytes_count))
-            return f.read().decode('utf-8', errors='ignore').strip().split('\n')
+            offset = max(0, size - bytes_count)
+            f.seek(offset)
+            if offset > 0:
+                f.readline()  # Skip partial first line after seeking mid-file
+            data = f.read().decode('utf-8', errors='replace')
+            return [l for l in data.strip().split('\n') if l.strip()]
     except OSError:
         return []
 
