@@ -5,7 +5,7 @@ import subprocess
 import time
 
 # xdotool modifier key mapping (macOS names -> X11 names)
-MOD_MAP = {"cmd": "super", "alt": "alt", "ctrl": "ctrl", "shift": "shift"}
+MOD_MAP = {"cmd": "ctrl", "alt": "alt", "ctrl": "ctrl", "shift": "shift"}
 
 # Key name mapping (macOS/Hammerspoon names -> xdotool names)
 KEY_MAP = {
