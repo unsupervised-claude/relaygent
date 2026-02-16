@@ -18,10 +18,10 @@ TIME=$(date '+%H:%M:%S %Z')
 CTX="Current time: $TIME"
 
 # Read cached notifications and extract reminders + chat messages
-NOTIF_INFO=$(python3 -c "
-import json
+NOTIF_INFO=$(CACHE_FILE="$CACHE_FILE" python3 -c "
+import json, os
 try:
-    with open('$CACHE_FILE') as f: data = json.load(f)
+    with open(os.environ['CACHE_FILE']) as f: data = json.load(f)
     parts = []
     for n in data:
         if n.get('type') == 'reminder':
@@ -50,7 +50,7 @@ if [[ -n "$REPO_PATH" ]]; then
     LATEST_JSONL=$(ls -t ~/.claude/projects/${RUNS_PREFIX}*/*.jsonl 2>/dev/null | head -1)
 fi
 if [[ -n "$LATEST_JSONL" ]]; then
-    FILL_PCT=$(tail -c 8192 "$LATEST_JSONL" 2>/dev/null | python3 -c "
+    FILL_PCT=$(tail -c 65536 "$LATEST_JSONL" 2>/dev/null | python3 -c "
 import sys, json
 data = sys.stdin.buffer.read().decode('utf-8', errors='ignore')
 for line in reversed(data.strip().split(chr(10))):

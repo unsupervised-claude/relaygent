@@ -36,9 +36,9 @@ echo -e "\n\033[0;34mServices:\033[0m"
 check_service() {
     local name=$1 url=$2
     if curl -s --max-time 2 "$url" >/dev/null 2>&1; then
-        echo "  ✓ $name: \033[0;32mrunning\033[0m"
+        echo -e "  ✓ $name: \033[0;32mrunning\033[0m"
     else
-        echo "  ✗ $name: \033[0;31mdown\033[0m"
+        echo -e "  ✗ $name: \033[0;31mdown\033[0m"
     fi
 }
 check_service "Notifications" "http://127.0.0.1:${NOTIF_PORT}/health"
