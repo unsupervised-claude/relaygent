@@ -110,8 +110,12 @@ def apps(_params: dict) -> tuple[dict, int]:
 
 def focus(params: dict) -> tuple[dict, int]:
     app = params.get("app")
+    window_id = params.get("window_id")
+    if window_id:
+        _run(["wmctrl", "-i", "-a", str(window_id)])
+        return {"focused": window_id}, 200
     if not app:
-        return {"error": "app required"}, 400
+        return {"error": "app or window_id required"}, 400
     try:
         out = _run(["wmctrl", "-l"])
         app_lower = app.lower()
@@ -129,6 +133,13 @@ def launch(params: dict) -> tuple[dict, int]:
     app = params.get("app")
     if not app:
         return {"error": "app required"}, 400
-    subprocess.Popen([app.lower()], stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
-    return {"launched": app}, 200
+    # Try original name, lowercase, and hyphenated-lowercase
+    candidates = [app, app.lower(), app.lower().replace(" ", "-")]
+    for name in dict.fromkeys(candidates):  # dedup preserving order
+        try:
+            subprocess.Popen([name], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            return {"launched": name}, 200
+        except FileNotFoundError:
+            continue
+    return {"error": f"could not find executable for '{app}'"}, 404

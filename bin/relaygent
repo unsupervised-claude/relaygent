@@ -11,12 +11,7 @@ load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo -e "${RED}Not set up yet. Run: ./setup.sh${NC}"; exit 1
     fi
-    HUB_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['hub']['port'])")
-    FORUM_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['services']['forum']['port'])")
-    NOTIF_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['services']['notifications']['port'])")
-    HS_PORT=$(python3 -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('services',{}).get('hammerspoon',{}).get('port',8097))")
-    DATA_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['paths']['data'])")
-    KB_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['paths']['kb'])")
+    eval "$(python3 -c "import json;c=json.load(open('$CONFIG_FILE'));s=c['services'];print(f'HUB_PORT={c[\"hub\"][\"port\"]}\nFORUM_PORT={s[\"forum\"][\"port\"]}\nNOTIF_PORT={s[\"notifications\"][\"port\"]}\nHS_PORT={s.get(\"hammerspoon\",{}).get(\"port\",8097)}\nDATA_DIR={c[\"paths\"][\"data\"]}\nKB_DIR={c[\"paths\"][\"kb\"]}')")"
     export RELAYGENT_DATA_DIR="$DATA_DIR" RELAYGENT_KB_DIR="$KB_DIR" RELAYGENT_HUB_PORT="$HUB_PORT"
     export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
 }
@@ -98,9 +93,7 @@ do_start() {
     check_port "$FORUM_PORT" "Forum" || port_ok=false
     check_port "$NOTIF_PORT" "Notifications" || port_ok=false
     if [ "$port_ok" = false ]; then
-        echo -e "\n  ${RED}Fix port conflicts above, then try again.${NC}"
-        echo -e "  ${YELLOW}Or choose a different hub port in ~/.relaygent/config.json${NC}"
-        exit 1
+        echo -e "\n  ${RED}Fix port conflicts above, then try again.${NC}"; exit 1
     fi
     # Computer-use backend
     if [ "$(uname)" = "Darwin" ]; then
@@ -169,15 +162,12 @@ do_stop() {
         [ -n "$pids" ] && kill $pids 2>/dev/null && \
             echo -e "  $name orphan (port $port): ${YELLOW}killed${NC}" || true
     done
-    # Kill MCP servers spawned by Claude CLI
-    local mcp_pids; mcp_pids=$(pgrep -f "mcp-chat\.mjs|mcp-server\.mjs" 2>/dev/null) || true
-    [ -n "$mcp_pids" ] && kill $mcp_pids 2>/dev/null && \
-        echo -e "  MCP servers: ${YELLOW}cleaned up${NC}" || true
-    # Kill notification poller daemon
-    local poller_pids; poller_pids=$(pgrep -f "notification-poller" 2>/dev/null) || true
-    [ -n "$poller_pids" ] && kill $poller_pids 2>/dev/null && \
-        echo -e "  Notification poller: ${YELLOW}cleaned up${NC}" || true
-    # Clean up lock file
+    # Kill MCP servers and notification poller
+    for label_pat in "MCP servers:mcp-chat\.mjs|mcp-server\.mjs" "Notification poller:notification-poller"; do
+        local label="${label_pat%%:*}" pat="${label_pat#*:}"
+        local pids; pids=$(pgrep -f "$pat" 2>/dev/null) || true
+        [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  $label: ${YELLOW}cleaned up${NC}" || true
+    done
     rm -f "$SCRIPT_DIR/harness/.relay.lock"
 }
 
