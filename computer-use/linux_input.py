@@ -87,8 +87,8 @@ def scroll(params: dict) -> tuple[dict, int]:
         _xdotool("mousemove", "--sync",
                  str(int(params["x"])), str(int(params["y"])))
 
-    # xdotool: button 4=up, 5=down
-    button = "4" if amount > 0 else "5"
+    # xdotool: button 4=up, 5=down; positive amount = scroll down
+    button = "5" if amount > 0 else "4"
     clicks = abs(amount)
 
     for _ in range(int(reps)):
