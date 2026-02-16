@@ -41,6 +41,17 @@ async function main() {
 	console.log(`${C.green}Claude Code authenticated.${C.reset}\n`);
 
 	console.log(`Sets up a persistent AI agent with a web dashboard.\n`);
+
+	// Agent identity
+	const agentNameInput = (await ask(`${C.cyan}Agent name [relaygent]:${C.reset} `)).trim();
+	const agentName = agentNameInput || 'relaygent';
+	const agentEmail = (await ask(`${C.cyan}Agent email (for identity/services):${C.reset} `)).trim();
+	if (!agentEmail) {
+		console.log(`${C.red}Email required — each agent needs an identity.${C.reset}`);
+		rl.close();
+		process.exit(1);
+	}
+
 	const hubPort = 8080;
 
 	// Write config
@@ -51,7 +62,7 @@ async function main() {
 	mkdirSync(DATA_DIR, { recursive: true });
 
 	const config = {
-		agent: { name: 'relaygent' },
+		agent: { name: agentName, email: agentEmail },
 		hub: { port: hubPort },
 		services: {
 			notifications: { port: hubPort + 3 }, forum: { port: hubPort + 5 },
@@ -84,11 +95,10 @@ async function main() {
 
 	// Init git for KB
 	if (!existsSync(join(kbRoot, '.git'))) {
-		const agentName = config.agent.name;
 		const gitCmds = [
 			'git init',
 			`git config user.name "${agentName}"`,
-			`git config user.email "${agentName}@localhost"`,
+			`git config user.email "${agentEmail}"`,
 			'git add -A',
 			'git commit -m "Initial KB"',
 		].join(' && ');
