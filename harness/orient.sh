@@ -43,7 +43,7 @@ check_service() {
 }
 check_service "Notifications" "http://127.0.0.1:${NOTIF_PORT}/health"
 check_service "Forum" "http://127.0.0.1:${FORUM_PORT}/health"
-check_service "Hub" "http://127.0.0.1:${HUB_PORT}/"
+check_service "Hub" "http://127.0.0.1:${HUB_PORT}/api/health"
 HS_PORT=$(python3 -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('services',{}).get('hammerspoon',{}).get('port',8097))" 2>/dev/null || echo 8097)
 check_service "Hammerspoon" "http://127.0.0.1:${HS_PORT}/health"
 
