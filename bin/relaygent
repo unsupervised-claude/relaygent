@@ -26,17 +26,13 @@ except Exception: sys.exit(1)
     export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
 }
 
+port_pids() { # port_pids <port> → prints PIDs listening on port
+    if command -v lsof &>/dev/null; then lsof -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -3
+    elif command -v ss &>/dev/null; then ss -tlnp "sport = :$1" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}' | head -3; fi
+}
 check_port() {
-    local port=$1 name=$2 pids=""
-    if command -v lsof &>/dev/null; then
-        pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -3)
-    elif command -v ss &>/dev/null; then
-        pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}' | head -3)
-    fi
-    if [ -n "$pids" ]; then
-        echo -e "  ${RED}Port $port ($name) in use (pid $pids).${NC} Kill: ${YELLOW}kill $pids${NC}"
-        return 1
-    fi
+    local pids; pids=$(port_pids "$1")
+    if [ -n "$pids" ]; then echo -e "  ${RED}Port $1 ($2) in use (pid $pids).${NC} Kill: ${YELLOW}kill $pids${NC}"; return 1; fi
 }
 
 ensure_venv() {
@@ -67,22 +63,16 @@ start_service() {
 
 stop_process() {
     local name=$1 pidfile="$PID_DIR/$2.pid"
-    if [ -f "$pidfile" ]; then
+    if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         local pid; pid=$(cat "$pidfile")
-        if kill -0 "$pid" 2>/dev/null; then
-            # Graceful SIGTERM first, then SIGKILL after 3s
-            pkill -TERM -P "$pid" 2>/dev/null || true
-            kill -TERM "$pid" 2>/dev/null || true
-            for _ in 1 2 3; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
-            echo -e "  $name: ${YELLOW}stopped${NC}"
-        else
-            echo -e "  $name: ${YELLOW}not running${NC}"
-        fi
-        rm -f "$pidfile"
+        pkill -TERM -P "$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
+        for _ in 1 2 3; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+        echo -e "  $name: ${YELLOW}stopped${NC}"
     else
         echo -e "  $name: ${YELLOW}not running${NC}"
     fi
+    rm -f "$pidfile" 2>/dev/null
 }
 
 check_process() {
@@ -116,14 +106,31 @@ do_start() {
         else
             echo -e "  Hammerspoon: ${GREEN}already running${NC}"
         fi
-    elif [ "$(uname)" = "Linux" ] && command -v xdotool &>/dev/null; then
-        check_port "$HS_PORT" "Computer-use" || port_ok=false
-        if [ "$port_ok" = true ]; then
-            start_service "Computer-use (port $HS_PORT)" "computer-use" \
-                env DISPLAY="${DISPLAY:-:0}" python3 "$SCRIPT_DIR/computer-use/linux-server.py"
+    elif [ "$(uname)" = "Linux" ]; then
+        local missing=""
+        for dep in xdotool scrot wmctrl convert; do
+            command -v "$dep" &>/dev/null || missing="$missing $dep"
+        done
+        python3 -c "import pyatspi" 2>/dev/null || missing="$missing python3-pyatspi"
+        if [ -n "$missing" ]; then
+            echo -e "  Computer-use: ${YELLOW}missing deps:${missing}${NC}"
+            echo -e "    ${YELLOW}Install: sudo apt install xdotool scrot wmctrl imagemagick python3-pyatspi at-spi2-core${NC}"
+        elif [ -z "${DISPLAY:-}" ]; then
+            echo -e "  Computer-use: ${YELLOW}no DISPLAY set (headless?)${NC}"
+        else
+            check_port "$HS_PORT" "Computer-use" || port_ok=false
+            if [ "$port_ok" = true ]; then
+                start_service "Computer-use (port $HS_PORT)" "computer-use" \
+                    env DISPLAY="${DISPLAY:-:0}" python3 "$SCRIPT_DIR/computer-use/linux-server.py"
+                # Verify server started
+                sleep 0.5
+                if ! curl -sf "http://localhost:$HS_PORT/health" >/dev/null 2>&1; then
+                    echo -e "    ${YELLOW}Warning: server started but /health not responding${NC}"
+                fi
+            fi
         fi
     else
-        echo -e "  Computer-use: ${YELLOW}unavailable (install xdotool scrot wmctrl)${NC}"
+        echo -e "  Computer-use: ${YELLOW}unavailable (unsupported platform)${NC}"
     fi
     # Hub — build if needed
     [ ! -d "$SCRIPT_DIR/hub/build" ] && echo "  Building hub..." && (cd "$SCRIPT_DIR/hub" && npm run build >/dev/null 2>&1)
@@ -159,34 +166,27 @@ do_stop() {
     stop_process "Hub" "hub"
     stop_process "Forum" "forum"
     stop_process "Notifications" "notifications"
-    # Fallback: kill by port if pidfiles were lost
-    for port_name in "${HUB_PORT:-8080}:Hub" "${FORUM_PORT:-8085}:Forum" "${NOTIF_PORT:-8083}:Notifications"; do
-        local port="${port_name%%:*}" name="${port_name##*:}" pids=""
-        if command -v lsof &>/dev/null; then pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null) || true
-        elif command -v ss &>/dev/null; then pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}') || true; fi
-        [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  $name orphan (port $port): ${YELLOW}killed${NC}" || true
+    # Fallback: kill orphans by port
+    for pn in "${HUB_PORT:-8080}:Hub" "${FORUM_PORT:-8085}:Forum" "${NOTIF_PORT:-8083}:Notifications"; do
+        local pids; pids=$(port_pids "${pn%%:*}") || true
+        [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  ${pn##*:} orphan: ${YELLOW}killed${NC}" || true
     done
     # Kill MCP servers and notification poller
-    for pat in "mcp-chat\.mjs|mcp-server\.mjs" "notification-poller"; do
-        local mpids; mpids=$(pgrep -f "$pat" 2>/dev/null) || true
-        [ -n "$mpids" ] && kill $mpids 2>/dev/null || true
-    done
+    local mpids; mpids=$(pgrep -f "mcp-chat\.mjs|mcp-server\.mjs|notification-poller" 2>/dev/null) || true
+    [ -n "$mpids" ] && kill $mpids 2>/dev/null || true
     rm -f "$SCRIPT_DIR/harness/.relay.lock"
 }
 
 do_status() {
     load_config
     echo -e "${CYAN}Relaygent Status${NC}"
-    check_process "Relay" "relay"
-    check_process "Hub" "hub"
-    check_process "Forum" "forum"
-    check_process "Notifications" "notifications"
+    for svc in Relay:relay Hub:hub Forum:forum Notifications:notifications; do
+        check_process "${svc%%:*}" "${svc##*:}"
+    done
     if [ "$(uname)" = "Darwin" ]; then
         pgrep -x Hammerspoon >/dev/null 2>&1 && echo -e "  Hammerspoon: ${GREEN}running${NC}" \
             || echo -e "  Hammerspoon: ${RED}stopped${NC}"
-    elif [ "$(uname)" = "Linux" ]; then
-        check_process "Computer-use" "computer-use"
-    fi
+    elif [ "$(uname)" = "Linux" ]; then check_process "Computer-use" "computer-use"; fi
 }
 
 case "${1:-help}" in
