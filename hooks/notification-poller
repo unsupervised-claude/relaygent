@@ -15,10 +15,11 @@ echo '[]' > "$CACHE_FILE"
 
 while true; do
     # Poll notifications (fast mode — DB only, skip slow checks)
-    RESULT=$(curl -s --max-time 3 "${NOTIFY_API}?fast=1" 2>/dev/null)
-    if [[ -n "$RESULT" ]]; then
-        echo "$RESULT" > "${CACHE_FILE}.tmp" && mv "${CACHE_FILE}.tmp" "$CACHE_FILE"
+    if RESULT=$(curl -sf --max-time 3 "${NOTIFY_API}?fast=1" 2>/dev/null); then
+        # Only update cache on successful HTTP response with valid JSON
+        if [[ -n "$RESULT" ]] && echo "$RESULT" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null; then
+            echo "$RESULT" > "${CACHE_FILE}.tmp" && mv "${CACHE_FILE}.tmp" "$CACHE_FILE"
+        fi
     fi
-
     sleep "$POLL_INTERVAL"
 done

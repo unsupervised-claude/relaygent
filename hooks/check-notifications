@@ -4,12 +4,23 @@
 
 CACHE_FILE="/tmp/relaygent-notifications-cache.json"
 
-# Ensure notification-poller is running
+# Ensure notification-poller is running (with crash backoff)
 POLLER_SCRIPT="$(dirname "$0")/notification-poller"
+POLLER_CRASH_FILE="/tmp/relaygent-poller-last-start"
 if ! pgrep -f "relaygent.*notification-poller" &>/dev/null; then
     if [[ -x "$POLLER_SCRIPT" ]]; then
-        nohup "$POLLER_SCRIPT" &>/dev/null &
-        disown
+        # Backoff: don't restart if last start was <10s ago (likely crash loop)
+        local_ok=true
+        if [[ -f "$POLLER_CRASH_FILE" ]]; then
+            last_start=$(cat "$POLLER_CRASH_FILE" 2>/dev/null || echo 0)
+            now=$(date +%s)
+            (( now - last_start < 10 )) && local_ok=false
+        fi
+        if [[ "$local_ok" = true ]]; then
+            date +%s > "$POLLER_CRASH_FILE"
+            nohup "$POLLER_SCRIPT" &>/dev/null &
+            disown
+        fi
     fi
 fi
 
