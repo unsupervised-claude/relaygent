@@ -49,7 +49,8 @@ class ClaudeProcess:
         try:
             if not LOG_FILE.exists():
                 return False
-            content = "".join(open(LOG_FILE).readlines()[log_start:])
+            with open(LOG_FILE) as f:
+                content = "".join(f.readlines()[log_start:])
             return "No messages returned" in content or "API Error" in content
         except OSError:
             return False
@@ -91,7 +92,6 @@ class ClaudeProcess:
         self._close_log()
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         return open(LOG_FILE, "a")
-
     def start_fresh(self) -> int:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
@@ -112,7 +112,6 @@ class ClaudeProcess:
             self._close_log()
             raise
         return log_start
-
     def resume(self, message: str) -> int:
         self._terminate()
         log_start = self._get_log_lines()
@@ -182,7 +181,11 @@ class ClaudeProcess:
             time.sleep(sleep_s)
 
         if self.process.poll() is None:
-            self.process.wait()
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                log("WARNING: Process stuck after monitor, force killing")
+                self.process.kill()
 
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
