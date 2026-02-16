@@ -57,8 +57,8 @@ def commit_kb() -> None:
             env["RELAY_RUN"] = "1"
             subprocess.run([str(commit_script)], env=env, capture_output=True, timeout=30)
             log("KB changes committed")
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"KB commit failed: {e}")
 
 
 def rotate_log() -> None:
@@ -69,6 +69,10 @@ def rotate_log() -> None:
         size = LOG_FILE.stat().st_size
         if size > LOG_MAX_SIZE:
             content = LOG_FILE.read_bytes()[-LOG_TRUNCATE_SIZE:]
+            # Skip to first complete line to avoid splitting mid-line
+            newline_pos = content.find(b"\n")
+            if 0 <= newline_pos < len(content) - 1:
+                content = content[newline_pos + 1:]
             LOG_FILE.write_bytes(content)
             log(f"Log rotated (was {size} bytes)")
     except OSError:
