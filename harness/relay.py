@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Relaygent - Autonomous context-based Claude runner."""
 
+import os
 import signal
 import sys
 import time
@@ -10,9 +11,6 @@ from pathlib import Path
 from config import (
     CONTEXT_THRESHOLD,
     HANG_CHECK_DELAY,
-    LOG_FILE,
-    LOG_MAX_SIZE,
-    LOG_TRUNCATE_SIZE,
     MAX_RETRIES,
     Timer,
     cleanup_old_workspaces,
@@ -32,27 +30,28 @@ class RelayRunner:
     def __init__(self):
         self.timer = Timer()
         self.sleep_mgr = SleepManager(self.timer)
+        self.claude: ClaudeProcess | None = None
 
     def _spawn_successor(self, workspace, reason):
-        """Spawn a successor session. Returns new (claude, session_id)."""
+        """Spawn a successor session. Returns new session_id."""
         log(f"{reason} ({self.timer.remaining() // 60} min remaining)")
         commit_kb()
         cleanup_context_file()
         session_id = str(uuid.uuid4())
-        new_claude = ClaudeProcess(session_id, self.timer, workspace)
+        self.claude = ClaudeProcess(session_id, self.timer, workspace)
         log(f"Successor session: {session_id}")
         time.sleep(3)
-        return new_claude, session_id
+        return session_id
 
-    def _sleep_wake_loop(self, claude):
+    def _sleep_wake_loop(self):
         """Run sleep/wake cycles. Returns ClaudeResult if context-full, None otherwise."""
         while True:
             result = self.sleep_mgr.auto_sleep_and_wake()
             if not result or not result.woken:
                 return None
             time.sleep(3)
-            log_start = claude.resume(result.wake_message)
-            claude_result = claude.monitor(log_start)
+            log_start = self.claude.resume(result.wake_message)
+            claude_result = self.claude.monitor(log_start)
             if claude_result.timed_out:
                 return None
             while claude_result.incomplete or claude_result.hung or claude_result.no_output:
@@ -61,15 +60,15 @@ class RelayRunner:
                 msg = "Hung during wake, resuming..." if claude_result.hung else "Exited mid-conversation, resuming..."
                 log(msg)
                 time.sleep(5)
-                log_start = claude.resume("Continue where you left off.")
-                claude_result = claude.monitor(log_start)
+                log_start = self.claude.resume("Continue where you left off.")
+                claude_result = self.claude.monitor(log_start)
                 if claude_result.timed_out:
                     return None
             if claude_result.exit_code != 0:
                 log(f"Crashed during wake (exit={claude_result.exit_code}), resuming...")
                 time.sleep(3)
-                log_start = claude.resume("You crashed and were resumed. Continue where you left off.")
-                claude_result = claude.monitor(log_start)
+                log_start = self.claude.resume("You crashed and were resumed. Continue where you left off.")
+                claude_result = self.claude.monitor(log_start)
             if claude_result.context_pct >= CONTEXT_THRESHOLD:
                 return claude_result
 
@@ -86,11 +85,12 @@ class RelayRunner:
         session_id = str(uuid.uuid4())
         log(f"Starting relay run (session: {session_id})")
 
-        claude = ClaudeProcess(session_id, self.timer, workspace)
+        self.claude = ClaudeProcess(session_id, self.timer, workspace)
 
         def _shutdown(*_):
             set_status("off")
-            claude._terminate()
+            if self.claude:
+                self.claude._terminate()
             sys.exit(1)
         signal.signal(signal.SIGTERM, _shutdown)
         signal.signal(signal.SIGINT, _shutdown)
@@ -102,11 +102,11 @@ class RelayRunner:
             if session_established:
                 msg = (f"Your previous API call failed after {HANG_CHECK_DELAY} seconds. "
                        f"Please proceed with the original instructions.")
-                log_start = claude.resume(msg)
+                log_start = self.claude.resume(msg)
             else:
-                log_start = claude.start_fresh()
+                log_start = self.claude.start_fresh()
 
-            result = claude.monitor(log_start)
+            result = self.claude.monitor(log_start)
             if self.timer.is_expired():
                 break
 
@@ -121,7 +121,7 @@ class RelayRunner:
                 if session_established:
                     log("Resume failed (no session), starting fresh...")
                     session_id = str(uuid.uuid4())
-                    claude.session_id = session_id
+                    self.claude.session_id = session_id
                     session_established = False
                 else:
                     log("Exited without output, resuming...")
@@ -144,12 +144,12 @@ class RelayRunner:
                     break
                 log(f"Crashed (exit={result.exit_code}), retrying ({crash_count}/{MAX_RETRIES})...")
                 session_id = str(uuid.uuid4())
-                claude.session_id = session_id
+                self.claude.session_id = session_id
                 session_established = False
                 time.sleep(15)
                 continue
 
-            if not should_sleep(claude.session_id, claude.workspace):
+            if not should_sleep(self.claude.session_id, self.claude.workspace):
                 log("Session incomplete (no stdout), resuming...")
                 session_established = True
                 time.sleep(2)
@@ -158,16 +158,16 @@ class RelayRunner:
             session_established = True
 
             if result.context_pct >= CONTEXT_THRESHOLD and self.timer.has_successor_time():
-                claude, session_id = self._spawn_successor(
+                session_id = self._spawn_successor(
                     workspace, f"Context at {result.context_pct:.0f}%, spawning successor")
                 session_established = False
                 crash_count = 0
                 continue
 
-            wake_result = self._sleep_wake_loop(claude)
+            wake_result = self._sleep_wake_loop()
             if (wake_result and wake_result.context_pct >= CONTEXT_THRESHOLD
                     and self.timer.has_successor_time()):
-                claude, session_id = self._spawn_successor(
+                session_id = self._spawn_successor(
                     workspace, f"Context at {wake_result.context_pct:.0f}% after wake")
                 session_established = False
                 crash_count = 0
@@ -182,9 +182,12 @@ class RelayRunner:
 
 
 def main() -> int:
-    acquire_lock()
+    lock_fd = acquire_lock()  # Must keep fd open or lock releases
     kill_orphaned_claudes()
-    return RelayRunner().run()
+    try:
+        return RelayRunner().run()
+    finally:
+        os.close(lock_fd)
 
 
 if __name__ == "__main__":
