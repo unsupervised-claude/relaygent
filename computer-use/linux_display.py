@@ -129,12 +129,21 @@ def focus(params: dict) -> tuple[dict, int]:
     return {"error": "not found"}, 404
 
 
+# Common Linux aliases for apps that have different binary names
+_ALIASES = {
+    "google-chrome": ["google-chrome-stable", "chromium-browser", "chromium", "firefox"],
+    "firefox": ["firefox-esr"],
+}
+
+
 def launch(params: dict) -> tuple[dict, int]:
     app = params.get("app")
     if not app:
         return {"error": "app required"}, 400
-    # Try original name, lowercase, and hyphenated-lowercase
+    # Try original name, lowercase, hyphenated-lowercase, then aliases
     candidates = [app, app.lower(), app.lower().replace(" ", "-")]
+    base = app.lower().replace(" ", "-")
+    candidates.extend(_ALIASES.get(base, []))
     for name in dict.fromkeys(candidates):  # dedup preserving order
         try:
             subprocess.Popen([name], stdout=subprocess.DEVNULL,

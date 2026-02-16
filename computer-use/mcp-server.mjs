@@ -152,12 +152,13 @@ server.tool("click_element", "Find UI element by title/role and click it. Auto-r
 	}
 );
 
-server.tool("browser_navigate", "Navigate Chrome to a URL. Auto-returns screenshot.",
+server.tool("browser_navigate", "Navigate browser to a URL. Auto-returns screenshot.",
 	{ url: z.string().describe("URL to navigate to"),
 		new_tab: z.boolean().optional().describe("Open in new tab") },
 	async ({ url, new_tab }) => {
 		const mod = IS_LINUX ? "ctrl" : "cmd";
-		await hsCall("POST", "/launch", { app: "Google Chrome" });
+		const browser = IS_LINUX ? "google-chrome" : "Google Chrome";
+		await hsCall("POST", "/launch", { app: browser });
 		await new Promise(r => setTimeout(r, 300));
 		await hsCall("POST", "/type", { key: new_tab ? "t" : "l", modifiers: [mod] });
 		await new Promise(r => setTimeout(r, 200));
