@@ -7,11 +7,16 @@ import sqlite3
 from config import DB_PATH
 
 
+@contextlib.contextmanager
 def get_db():
+    """Yield a SQLite connection that is closed when the context exits."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db():
