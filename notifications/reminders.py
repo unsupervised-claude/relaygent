@@ -35,6 +35,29 @@ def get_upcoming():
     return jsonify([dict(r) for r in rows])
 
 
+MAX_MESSAGE_LEN = 2000
+
+
+def _validate_iso(value):
+    """Validate that value is a parseable ISO datetime string."""
+    try:
+        datetime.fromisoformat(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _validate_cron(value):
+    """Validate that value is a valid cron expression."""
+    if not CRONITER_AVAILABLE:
+        return True  # Can't validate without croniter, allow it
+    try:
+        croniter(value)
+        return True
+    except (ValueError, TypeError, KeyError):
+        return False
+
+
 @app.route("/reminder", methods=["POST"])
 def create_reminder():
     """Create a new reminder. JSON: {trigger_time, message, recurrence?}"""
@@ -42,12 +65,23 @@ def create_reminder():
     if not data or "trigger_time" not in data or "message" not in data:
         return jsonify({"error": "trigger_time and message required"}), 400
 
+    trigger_time = data["trigger_time"]
+    message = data["message"]
     recurrence = data.get("recurrence")
+
+    if not isinstance(trigger_time, str) or not _validate_iso(trigger_time):
+        return jsonify({"error": "trigger_time must be valid ISO datetime"}), 400
+    if not isinstance(message, str) or len(message) > MAX_MESSAGE_LEN:
+        return jsonify({"error": f"message must be string, max {MAX_MESSAGE_LEN} chars"}), 400
+    if recurrence is not None:
+        if not isinstance(recurrence, str) or not _validate_cron(recurrence):
+            return jsonify({"error": "recurrence must be valid cron expression"}), 400
+
     with get_db() as conn:
         cursor = conn.execute(
             "INSERT INTO reminders (trigger_time, message, recurrence) "
             "VALUES (?, ?, ?)",
-            (data["trigger_time"], data["message"], recurrence),
+            (trigger_time, message, recurrence),
         )
         conn.commit()
         reminder_id = cursor.lastrowid
@@ -62,10 +96,12 @@ def create_reminder():
 def delete_reminder(reminder_id):
     """Delete/cancel a reminder."""
     with get_db() as conn:
-        conn.execute(
+        cursor = conn.execute(
             "DELETE FROM reminders WHERE id = ?", (reminder_id,)
         )
         conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"error": "reminder not found"}), 404
     return jsonify({"status": "deleted"})
 
 
