@@ -5,7 +5,14 @@ import fs from 'fs';
 import path from 'path';
 import { summarizeInput, summarizeResult, extractResultText, findLatestSession } from './src/lib/relayActivity.js';
 
-const server = createServer(handler);
+const server = createServer((req, res) => {
+	if (req.url === '/api/health') {
+		res.writeHead(200, { 'Content-Type': 'application/json' });
+		res.end('{"status":"ok"}');
+		return;
+	}
+	handler(req, res);
+});
 
 // Two WebSocket endpoints: relay activity + chat
 const relayWss = new WebSocketServer({ noServer: true });
