@@ -3,7 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { parseSession, findLatestSession } from '$lib/relayActivity.js';
 
+// Session IDs are UUIDs — reject anything else to prevent path traversal
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function findSessionById(sessionId) {
+	if (!SESSION_ID_RE.test(sessionId)) return null;
 	const claudeProjects = path.join(process.env.HOME, '.claude', 'projects');
 	try {
 		for (const dir of fs.readdirSync(claudeProjects)) {
@@ -17,8 +21,8 @@ function findSessionById(sessionId) {
 }
 
 export function GET({ url }) {
-	const offset = parseInt(url.searchParams.get('offset') || '0', 10);
-	const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+	const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
+	const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '20', 10) || 20, 200));
 	const sessionId = url.searchParams.get('session');
 
 	const sessionFile = sessionId ? findSessionById(sessionId) : findLatestSession();
