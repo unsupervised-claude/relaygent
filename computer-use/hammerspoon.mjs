@@ -1,10 +1,12 @@
-// Hammerspoon HTTP client with FIFO queue and auto-reload on failure
+// HTTP client for computer-use backend (Hammerspoon on macOS, linux-server.py on Linux)
 // All requests serialized through single TCP connection
 
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { platform } from "node:os";
 import http from "node:http";
 
+const IS_LINUX = platform() === "linux";
 const PORT = parseInt(process.env.HAMMERSPOON_PORT || "8097", 10);
 const agent = new http.Agent({ keepAlive: false, maxSockets: 1 });
 let tail = Promise.resolve();
@@ -35,6 +37,7 @@ function hsCallOnce(method, path, body, timeoutMs) {
 }
 
 function reloadHammerspoon() {
+	if (IS_LINUX) return Promise.resolve(); // No Hammerspoon on Linux
 	return new Promise(resolve => {
 		execFile("/usr/bin/osascript", ["-e",
 			'tell application "Hammerspoon" to execute lua code "hs.reload()"'],
@@ -73,8 +76,9 @@ export async function takeScreenshot(delayMs = 300, indicator) {
 	} catch { return []; }
 }
 
-/** Run osascript with timeout. */
+/** Run osascript with timeout (macOS only). */
 export function runOsascript(code, ms = 8000) {
+	if (IS_LINUX) return Promise.resolve({ success: false, error: "AppleScript not available on Linux" });
 	return new Promise(resolve => {
 		execFile("/usr/bin/osascript", ["-e", code], { timeout: ms }, (err, stdout, stderr) => {
 			if (err?.killed) resolve({ success: false, error: "Timed out", timedOut: true });

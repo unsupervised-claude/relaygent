@@ -102,10 +102,10 @@ do_start() {
         echo -e "  ${YELLOW}Or choose a different hub port in ~/.relaygent/config.json${NC}"
         exit 1
     fi
-    # Hammerspoon (computer-use) — macOS only
-    if [ "$(uname)" = "Darwin" ] && command -v open &>/dev/null; then
+    # Computer-use backend
+    if [ "$(uname)" = "Darwin" ]; then
         if ! pgrep -x Hammerspoon >/dev/null 2>&1; then
-            if open -Ra Hammerspoon 2>/dev/null; then
+            if command -v open &>/dev/null && open -Ra Hammerspoon 2>/dev/null; then
                 open -a Hammerspoon
                 echo -e "  Hammerspoon: ${GREEN}launched${NC}"
             else
@@ -114,6 +114,14 @@ do_start() {
         else
             echo -e "  Hammerspoon: ${GREEN}already running${NC}"
         fi
+    elif [ "$(uname)" = "Linux" ] && command -v xdotool &>/dev/null; then
+        check_port "$HS_PORT" "Computer-use" || port_ok=false
+        if [ "$port_ok" = true ]; then
+            start_service "Computer-use (port $HS_PORT)" "computer-use" \
+                "cd $SCRIPT_DIR/computer-use && python3 linux-server.py"
+        fi
+    else
+        echo -e "  Computer-use: ${YELLOW}unavailable (install xdotool scrot wmctrl)${NC}"
     fi
     # Hub — build if needed
     [ ! -d "$SCRIPT_DIR/hub/build" ] && echo "  Building hub..." && (cd "$SCRIPT_DIR/hub" && npm run build >/dev/null 2>&1)
@@ -145,6 +153,7 @@ do_stop() {
     local claude_pids; claude_pids=$(pgrep -f "claude.*--print.*--session-id" 2>/dev/null) || true
     [ -n "$claude_pids" ] && kill -TERM $claude_pids 2>/dev/null && \
         echo -e "  Claude processes: ${YELLOW}cleaned up${NC}" || true
+    stop_process "Computer-use" "computer-use"
     stop_process "Hub" "hub"
     stop_process "Forum" "forum"
     stop_process "Notifications" "notifications"
@@ -185,6 +194,8 @@ do_status() {
         else
             echo -e "  Hammerspoon: ${RED}stopped${NC}"
         fi
+    elif [ "$(uname)" = "Linux" ]; then
+        check_process "Computer-use" "computer-use"
     fi
 }
 
