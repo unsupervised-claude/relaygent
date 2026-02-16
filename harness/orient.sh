@@ -80,7 +80,7 @@ if [ -f "$HANDOFF_FILE" ]; then
     GOAL=$(sed -n '/## MAIN GOAL/,/^##[^#]/p' "$HANDOFF_FILE" | head -5)
     if [ -n "$GOAL" ]; then
         echo -e "\033[1;33m┌─ MAIN GOAL ─────────────────────────────────────────┐\033[0m"
-        echo -e "$GOAL" | while IFS= read -r line; do
+        echo "$GOAL" | while IFS= read -r line; do
             echo -e "\033[1;33m│\033[0m $line"
         done
         echo -e "\033[1;33m└─────────────────────────────────────────────────────┘\033[0m"
