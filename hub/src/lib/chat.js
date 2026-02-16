@@ -68,9 +68,10 @@ export function getMessage(id) {
 
 export function getMessages(limit = 50, before = null) {
 	const d = getDb();
+	const safeLimit = Math.max(1, Math.min(limit, 200));
 	const rows = before
-		? d.prepare('SELECT * FROM messages WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit)
-		: d.prepare('SELECT * FROM messages ORDER BY id DESC LIMIT ?').all(limit);
+		? d.prepare('SELECT * FROM messages WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, safeLimit)
+		: d.prepare('SELECT * FROM messages ORDER BY id DESC LIMIT ?').all(safeLimit);
 	return rows.map(decryptRow);
 }
 

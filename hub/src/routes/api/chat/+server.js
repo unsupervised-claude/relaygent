@@ -11,11 +11,14 @@ export function GET({ url }) {
 		const msgs = getUnreadHumanMessages();
 		return json({ count: msgs.length, messages: msgs });
 	}
-	const limit = parseInt(url.searchParams.get('limit') || '50', 10);
-	const before = url.searchParams.get('before');
-	const messages = getMessages(limit, before ? parseInt(before, 10) : null);
+	const limit = Math.max(1, Math.min(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 200));
+	const rawBefore = url.searchParams.get('before');
+	const before = rawBefore ? Math.max(1, parseInt(rawBefore, 10) || 0) : null;
+	const messages = getMessages(limit, before);
 	return json({ messages });
 }
+
+const MAX_CONTENT_LENGTH = 10000;
 
 /** POST /api/chat — send a message */
 export async function POST({ request }) {
@@ -23,16 +26,26 @@ export async function POST({ request }) {
 	if (!content?.trim()) {
 		return json({ error: 'Content is required' }, { status: 400 });
 	}
+	const trimmed = content.trim();
+	if (trimmed.length > MAX_CONTENT_LENGTH) {
+		return json({ error: `Content exceeds ${MAX_CONTENT_LENGTH} characters` }, { status: 400 });
+	}
 	const msg = role === 'assistant'
-		? sendAssistantMessage(content.trim())
-		: sendHumanMessage(content.trim());
+		? sendAssistantMessage(trimmed)
+		: sendHumanMessage(trimmed);
 	try { fs.writeFileSync(TRIGGER_FILE, JSON.stringify(msg)); } catch {}
 	return json(msg, { status: 201 });
 }
 
+const MAX_MARK_READ = 100;
+
 /** PATCH /api/chat — mark messages as read */
 export async function PATCH({ request }) {
 	const { ids } = await request.json();
-	if (ids?.length) markAsRead(ids);
+	if (!Array.isArray(ids) || !ids.length) {
+		return json({ error: 'ids must be a non-empty array' }, { status: 400 });
+	}
+	const validIds = ids.slice(0, MAX_MARK_READ).filter(id => Number.isInteger(id) && id > 0);
+	if (validIds.length) markAsRead(validIds);
 	return json({ ok: true });
 }
