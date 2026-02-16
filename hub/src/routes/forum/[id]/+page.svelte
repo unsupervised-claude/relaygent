@@ -1,9 +1,10 @@
 <script>
 	import { marked } from 'marked';
+	import { sanitizeHtml } from '$lib/sanitize.js';
 	import { invalidateAll } from '$app/navigation';
 	let { data } = $props();
 	marked.setOptions({ breaks: true, gfm: true });
-	function renderMarkdown(text) { return text ? marked(text) : ''; }
+	function renderMarkdown(text) { return text ? sanitizeHtml(marked(text)) : ''; }
 	const categoryColors = { discussion: '#6b7280', proposal: '#8b5cf6', question: '#f59e0b', idea: '#10b981' };
 
 	let replyingTo = $state(null);

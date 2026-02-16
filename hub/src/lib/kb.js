@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import matter from 'gray-matter';
 import { marked } from 'marked';
+import { sanitizeHtml } from './sanitize.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = path.join(__dirname, '..', '..', '..');
@@ -71,7 +72,7 @@ export function getTopic(slug) {
 	const filepath = safeSlugPath(slug);
 	if (!fs.existsSync(filepath)) return null;
 	const { meta, content } = parseFile(filepath);
-	const html = renderWikiLinks(marked(content));
+	const html = sanitizeHtml(renderWikiLinks(marked(content)));
 	const allFiles = fs.readdirSync(KB_DIR).filter(f => f.endsWith('.md') && f !== `${slug}.md`);
 	const backlinks = allFiles.filter(f => {
 		const raw = fs.readFileSync(path.join(KB_DIR, f), 'utf-8');

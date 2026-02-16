@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { marked } from 'marked';
+import { sanitizeHtml } from '$lib/sanitize.js';
 
 const INTENT_PATH = path.join(getKbDir(), 'intent.md');
 
@@ -11,7 +12,7 @@ export function load() {
 	if (!fs.existsSync(INTENT_PATH)) throw error(404, 'Intent file not found');
 	const raw = fs.readFileSync(INTENT_PATH, 'utf-8');
 	const { data: frontmatter, content } = matter(raw);
-	const html = marked(content);
+	const html = sanitizeHtml(marked(content));
 	return {
 		title: frontmatter.title || 'Intent',
 		updated: frontmatter.updated || null,
