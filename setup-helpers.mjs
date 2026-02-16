@@ -4,6 +4,10 @@ import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
 export function setupHammerspoon(config, REPO_DIR, HOME, C, ask) {
+	if (process.platform !== 'darwin') {
+		console.log(`  Hammerspoon: ${C.dim}skipped (macOS only)${C.reset}`);
+		return;
+	}
 	const hsDir = join(HOME, '.hammerspoon');
 	const srcDir = join(REPO_DIR, 'hammerspoon');
 	mkdirSync(hsDir, { recursive: true });
@@ -11,7 +15,6 @@ export function setupHammerspoon(config, REPO_DIR, HOME, C, ask) {
 		copyFileSync(join(srcDir, f), join(hsDir, f));
 	}
 	console.log(`  Hammerspoon: lua files installed to ${hsDir}`);
-	if (process.platform !== 'darwin') return;
 
 	const hs = spawnSync('open', ['-Ra', 'Hammerspoon'], { stdio: 'pipe' });
 	if (hs.status === 0) {

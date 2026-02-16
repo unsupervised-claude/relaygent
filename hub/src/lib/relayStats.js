@@ -31,7 +31,7 @@ function parseSession(jsonlPath) {
 					turns++;
 					const usage = entry.message?.usage;
 					if (usage) {
-						totalTokens = (usage.input_tokens || 0)
+						totalTokens += (usage.input_tokens || 0)
 							+ (usage.cache_creation_input_tokens || 0)
 							+ (usage.cache_read_input_tokens || 0);
 						outputTokens += usage.output_tokens || 0;
