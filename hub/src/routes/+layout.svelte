@@ -1,6 +1,7 @@
 <script>
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
+	import ChatBubble from '$lib/components/ChatBubble.svelte';
 
 	let { children } = $props();
 	let darkMode = $state(false);
@@ -36,7 +37,6 @@
 		<span class="bar" class:open={menuOpen}></span>
 	</button>
 	<div class="links" class:open={menuOpen}>
-		<a href="/chat" class:active={isActive('/chat')} onclick={closeMenu}>Chat</a>
 		<a href="/intent" class:active={isActive('/intent')} onclick={closeMenu}>Intent</a>
 		<a href="/kb" class:active={isActive('/kb')} onclick={closeMenu}>KB</a>
 		<a href="/forum" class:active={isActive('/forum')} onclick={closeMenu}>Forum</a>
@@ -52,6 +52,7 @@
 <main>
 	{@render children()}
 </main>
+<ChatBubble />
 </div>
 
 <style>
