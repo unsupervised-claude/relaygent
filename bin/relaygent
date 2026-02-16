@@ -115,7 +115,7 @@ do_start() {
         check_port "$HS_PORT" "Computer-use" || port_ok=false
         if [ "$port_ok" = true ]; then
             start_service "Computer-use (port $HS_PORT)" "computer-use" \
-                python3 "$SCRIPT_DIR/computer-use/linux-server.py"
+                env DISPLAY="${DISPLAY:-:0}" python3 "$SCRIPT_DIR/computer-use/linux-server.py"
         fi
     else
         echo -e "  Computer-use: ${YELLOW}unavailable (install xdotool scrot wmctrl)${NC}"
