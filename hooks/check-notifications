@@ -21,7 +21,7 @@ CTX="Current time: $TIME"
 NOTIF_INFO=$(python3 -c "
 import json
 try:
-    data = json.load(open('$CACHE_FILE'))
+    with open('$CACHE_FILE') as f: data = json.load(f)
     parts = []
     for n in data:
         if n.get('type') == 'reminder':
@@ -41,7 +41,10 @@ fi
 CONTEXT_PCT_FILE="/tmp/relaygent-context-pct"
 CONTEXT_THRESHOLD=85
 # Find most recent JSONL from our harness runs (scoped via config.json repo path)
-REPO_PATH=$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/.relaygent/config.json')))['paths']['repo'])" 2>/dev/null)
+REPO_PATH=$(python3 -c "
+import json,os
+with open(os.path.expanduser('~/.relaygent/config.json')) as f: print(json.load(f)['paths']['repo'])
+" 2>/dev/null)
 if [[ -n "$REPO_PATH" ]]; then
     RUNS_PREFIX=$(echo "${REPO_PATH}/harness/runs" | sed 's|/|-|g')
     LATEST_JSONL=$(ls -t ~/.claude/projects/${RUNS_PREFIX}*/*.jsonl 2>/dev/null | head -1)
