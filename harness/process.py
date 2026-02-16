@@ -186,7 +186,10 @@ class ClaudeProcess:
             except subprocess.TimeoutExpired:
                 log("WARNING: Process stuck after monitor, force killing")
                 self.process.kill()
-                self.process.wait()
+                try:
+                    self.process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    log("WARNING: Process did not die after kill")
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
         return ClaudeResult(
