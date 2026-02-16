@@ -48,13 +48,14 @@ ensure_venv() {
 }
 
 start_service() {
-    local name=$1 pidfile="$PID_DIR/$2.pid" cmd=$3 logfile="$SCRIPT_DIR/logs/relaygent-$2.log"
+    local name=$1 pidfile="$PID_DIR/$2.pid" logfile="$SCRIPT_DIR/logs/relaygent-$2.log"
+    shift 2
     mkdir -p "$SCRIPT_DIR/logs"
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         echo -e "  $name: ${GREEN}already running${NC}"
         return
     fi
-    eval "$cmd" > "$logfile" 2>&1 &
+    "$@" > "$logfile" 2>&1 &
     echo $! > "$pidfile"
     echo -e "  $name: ${GREEN}started${NC}"
 }
@@ -114,28 +115,28 @@ do_start() {
         check_port "$HS_PORT" "Computer-use" || port_ok=false
         if [ "$port_ok" = true ]; then
             start_service "Computer-use (port $HS_PORT)" "computer-use" \
-                "cd $SCRIPT_DIR/computer-use && python3 linux-server.py"
+                python3 "$SCRIPT_DIR/computer-use/linux-server.py"
         fi
     else
         echo -e "  Computer-use: ${YELLOW}unavailable (install xdotool scrot wmctrl)${NC}"
     fi
     # Hub — build if needed
     [ ! -d "$SCRIPT_DIR/hub/build" ] && echo "  Building hub..." && (cd "$SCRIPT_DIR/hub" && npm run build >/dev/null 2>&1)
-    start_service "Hub (port $HUB_PORT)" "hub" "PORT=$HUB_PORT node $SCRIPT_DIR/hub/server.js"
+    start_service "Hub (port $HUB_PORT)" "hub" env PORT="$HUB_PORT" node "$SCRIPT_DIR/hub/server.js"
     # Forum
     ensure_venv "$SCRIPT_DIR/forum"
     start_service "Forum (port $FORUM_PORT)" "forum" \
-        "$SCRIPT_DIR/forum/.venv/bin/python3 $SCRIPT_DIR/forum/server.py"
+        "$SCRIPT_DIR/forum/.venv/bin/python3" "$SCRIPT_DIR/forum/server.py"
     # Notifications
     ensure_venv "$SCRIPT_DIR/notifications"
     start_service "Notifications (port $NOTIF_PORT)" "notifications" \
-        "$SCRIPT_DIR/notifications/.venv/bin/python3 $SCRIPT_DIR/notifications/server.py"
+        "$SCRIPT_DIR/notifications/.venv/bin/python3" "$SCRIPT_DIR/notifications/server.py"
     # Relay — verify Claude auth before starting
     if ! claude -p 'hi' >/dev/null 2>&1; then
         echo -e "  Relay: ${RED}Claude not authenticated. Run 'claude' to log in first.${NC}"
     else
         start_service "Relay" "relay" \
-            "cd $SCRIPT_DIR/harness && python3 relay.py"
+            python3 "$SCRIPT_DIR/harness/relay.py"
     fi
     echo -e "\n  Dashboard: ${CYAN}http://localhost:$HUB_PORT/${NC}"
     echo -e "  Logs:      $SCRIPT_DIR/logs/\n"
