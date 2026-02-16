@@ -63,7 +63,7 @@ function parseSessionLine(line) {
 	return [];
 }
 
-let watchedFile = null, fileWatcher = null, lastSize = 0;
+let watchedFile = null, fileWatcher = null, lastSize = 0, incompleteLine = '';
 
 function startWatching() {
 	const sessionFile = findLatestSession();
@@ -74,6 +74,7 @@ function startWatching() {
 	watchedFile = sessionFile;
 	lastSize = fs.statSync(sessionFile).size;
 	pendingTools.clear();
+	incompleteLine = '';
 
 	fileWatcher = fs.watch(sessionFile, (eventType) => {
 		if (eventType !== 'change') return;
@@ -86,7 +87,11 @@ function startWatching() {
 			fs.closeSync(fd);
 			lastSize = stat.size;
 
-			for (const line of buffer.toString('utf-8').trim().split('\n').filter(l => l.trim())) {
+			const chunk = incompleteLine + buffer.toString('utf-8');
+			const lines = chunk.split('\n');
+			// Last element may be incomplete if chunk didn't end with newline
+			incompleteLine = chunk.endsWith('\n') ? '' : lines.pop();
+			for (const line of lines.filter(l => l.trim())) {
 				for (const activity of parseSessionLine(line)) {
 					broadcastRelay({ type: 'activity', data: activity });
 				}
