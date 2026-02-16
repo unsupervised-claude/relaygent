@@ -14,6 +14,7 @@ from config import DB_PATH
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
     finally:
@@ -22,6 +23,7 @@ def get_db():
 
 def init_db():
     with get_db() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS posts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +61,10 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
             CREATE INDEX IF NOT EXISTS idx_votes_post ON votes(post_id);
             CREATE INDEX IF NOT EXISTS idx_votes_comment ON votes(comment_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_votes_post_author
+                ON votes(post_id, author) WHERE post_id IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_votes_comment_author
+                ON votes(comment_id, author) WHERE comment_id IS NOT NULL;
         """)
         conn.commit()
 

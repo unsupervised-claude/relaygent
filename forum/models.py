@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PostCreate(BaseModel):
-    author: str
-    title: str
-    content: str
+    author: str = Field(..., min_length=1, max_length=100)
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1, max_length=50000)
     category: str = "discussion"
     tags: List[str] = []
 
 
 class CommentCreate(BaseModel):
-    author: str
-    content: str
+    author: str = Field(..., min_length=1, max_length=100)
+    content: str = Field(..., min_length=1, max_length=50000)
     parent_id: Optional[int] = None
 
 
