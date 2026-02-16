@@ -17,17 +17,19 @@ load_config() {
     HS_PORT=$(python3 -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('services',{}).get('hammerspoon',{}).get('port',8097))")
     DATA_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['paths']['data'])")
     KB_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['paths']['kb'])")
-    export RELAYGENT_DATA_DIR="$DATA_DIR" RELAYGENT_KB_DIR="$KB_DIR"
-    export RELAYGENT_HUB_PORT="$HUB_PORT" HAMMERSPOON_PORT="$HS_PORT"
-    export RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
+    export RELAYGENT_DATA_DIR="$DATA_DIR" RELAYGENT_KB_DIR="$KB_DIR" RELAYGENT_HUB_PORT="$HUB_PORT"
+    export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
 }
 
 check_port() {
-    local port=$1 name=$2
-    if lsof -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
-        local pids; pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -3)
-        local proc; proc=$(lsof -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | tail -1 | awk '{print $1}')
-        echo -e "  ${RED}Port $port ($name) is already in use by: $proc (pid $pids)${NC}"
+    local port=$1 name=$2 pids=""
+    if command -v lsof &>/dev/null; then
+        pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -3)
+    elif command -v ss &>/dev/null; then
+        pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}' | head -3)
+    fi
+    if [ -n "$pids" ]; then
+        echo -e "  ${RED}Port $port ($name) is already in use (pid $pids)${NC}"
         echo -e "  ${YELLOW}Kill it with: kill $pids${NC}"
         return 1
     fi
@@ -64,9 +66,11 @@ stop_process() {
     if [ -f "$pidfile" ]; then
         local pid; pid=$(cat "$pidfile")
         if kill -0 "$pid" 2>/dev/null; then
-            # Kill entire process group quickly
-            pkill -9 -P "$pid" 2>/dev/null || true
-            kill -9 "$pid" 2>/dev/null || true
+            # Graceful SIGTERM first, then SIGKILL after 3s
+            pkill -TERM -P "$pid" 2>/dev/null || true
+            kill -TERM "$pid" 2>/dev/null || true
+            for _ in 1 2 3; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
             echo -e "  $name: ${YELLOW}stopped${NC}"
         else
             echo -e "  $name: ${YELLOW}not running${NC}"
@@ -89,8 +93,7 @@ check_process() {
 do_start() {
     load_config
     echo -e "${CYAN}Starting Relaygent...${NC}"
-    # Check all ports before starting anything
-    local port_ok=true
+    local port_ok=true  # Check all ports before starting anything
     check_port "$HUB_PORT" "Hub" || port_ok=false
     check_port "$FORUM_PORT" "Forum" || port_ok=false
     check_port "$NOTIF_PORT" "Notifications" || port_ok=false
@@ -112,9 +115,8 @@ do_start() {
             echo -e "  Hammerspoon: ${GREEN}already running${NC}"
         fi
     fi
-    # Hub
-    cd "$SCRIPT_DIR/hub"
-    [ ! -d "build" ] && echo "  Building hub..." && npm run build >/dev/null 2>&1
+    # Hub — build if needed
+    [ ! -d "$SCRIPT_DIR/hub/build" ] && echo "  Building hub..." && (cd "$SCRIPT_DIR/hub" && npm run build >/dev/null 2>&1)
     start_service "Hub (port $HUB_PORT)" "hub" "PORT=$HUB_PORT node $SCRIPT_DIR/hub/server.js"
     # Forum
     ensure_venv "$SCRIPT_DIR/forum"
@@ -131,10 +133,8 @@ do_start() {
         start_service "Relay" "relay" \
             "cd $SCRIPT_DIR/harness && python3 relay.py"
     fi
-    echo ""
-    echo -e "  Dashboard: ${CYAN}http://localhost:$HUB_PORT/${NC}"
-    echo -e "  Logs:      $SCRIPT_DIR/logs/"
-    echo ""
+    echo -e "\n  Dashboard: ${CYAN}http://localhost:$HUB_PORT/${NC}"
+    echo -e "  Logs:      $SCRIPT_DIR/logs/\n"
 }
 
 do_stop() {
@@ -142,8 +142,8 @@ do_stop() {
     echo -e "${CYAN}Stopping Relaygent...${NC}"
     stop_process "Relay" "relay"
     # Kill any orphaned claude subprocesses spawned by the relay
-    local claude_pids; claude_pids=$(pgrep -f "claude.*--print" 2>/dev/null) || true
-    [ -n "$claude_pids" ] && kill -9 $claude_pids 2>/dev/null && \
+    local claude_pids; claude_pids=$(pgrep -f "claude.*--print.*--session-id" 2>/dev/null) || true
+    [ -n "$claude_pids" ] && kill -TERM $claude_pids 2>/dev/null && \
         echo -e "  Claude processes: ${YELLOW}cleaned up${NC}" || true
     stop_process "Hub" "hub"
     stop_process "Forum" "forum"
@@ -151,17 +151,22 @@ do_stop() {
     # Fallback: kill by port if pidfiles were lost
     for port_name in "${HUB_PORT:-8080}:Hub" "${FORUM_PORT:-8085}:Forum" "${NOTIF_PORT:-8083}:Notifications"; do
         port="${port_name%%:*}"; name="${port_name##*:}"
-        pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null) || true
+        pids=""
+        if command -v lsof &>/dev/null; then
+            pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null) || true
+        elif command -v ss &>/dev/null; then
+            pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}') || true
+        fi
         [ -n "$pids" ] && kill $pids 2>/dev/null && \
             echo -e "  $name orphan (port $port): ${YELLOW}killed${NC}" || true
     done
     # Kill MCP servers spawned by Claude CLI
     local mcp_pids; mcp_pids=$(pgrep -f "mcp-chat\.mjs|mcp-server\.mjs" 2>/dev/null) || true
-    [ -n "$mcp_pids" ] && kill -9 $mcp_pids 2>/dev/null && \
+    [ -n "$mcp_pids" ] && kill $mcp_pids 2>/dev/null && \
         echo -e "  MCP servers: ${YELLOW}cleaned up${NC}" || true
     # Kill notification poller daemon
     local poller_pids; poller_pids=$(pgrep -f "notification-poller" 2>/dev/null) || true
-    [ -n "$poller_pids" ] && kill -9 $poller_pids 2>/dev/null && \
+    [ -n "$poller_pids" ] && kill $poller_pids 2>/dev/null && \
         echo -e "  Notification poller: ${YELLOW}cleaned up${NC}" || true
     # Clean up lock file
     rm -f "$SCRIPT_DIR/harness/.relay.lock"
