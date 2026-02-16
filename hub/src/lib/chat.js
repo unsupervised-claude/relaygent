@@ -83,9 +83,11 @@ export function getUnreadHumanMessages() {
 
 export function markAsRead(ids) {
 	if (!ids?.length) return;
+	const safeIds = ids.map(id => Number(id)).filter(id => Number.isInteger(id) && id > 0);
+	if (!safeIds.length) return;
 	const d = getDb();
-	const placeholders = ids.map(() => '?').join(',');
-	d.prepare(`UPDATE messages SET read = 1 WHERE id IN (${placeholders})`).run(...ids);
+	const placeholders = safeIds.map(() => '?').join(',');
+	d.prepare(`UPDATE messages SET read = 1 WHERE id IN (${placeholders})`).run(...safeIds);
 }
 
 export function markAllRead() {

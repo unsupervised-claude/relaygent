@@ -10,16 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import (
-    CONTEXT_THRESHOLD,
-    HANG_CHECK_DELAY,
-    MAX_RETRIES,
-    Timer,
-    cleanup_old_workspaces,
-    get_workspace_dir,
-    log,
-    set_status,
-)
+from config import (CONTEXT_THRESHOLD, HANG_CHECK_DELAY, MAX_RETRIES, Timer,
+                     cleanup_old_workspaces, get_workspace_dir, log, set_status)
 from jsonl_checks import should_sleep
 from process import ClaudeProcess
 from relay_utils import acquire_lock, cleanup_context_file, commit_kb, kill_orphaned_claudes, notify_crash, rotate_log
@@ -52,7 +44,12 @@ class RelayRunner:
             if not result or not result.woken:
                 return None
             time.sleep(3)
-            log_start = self.claude.resume(result.wake_message)
+            try:
+                log_start = self.claude.resume(result.wake_message)
+            except OSError as e:
+                log(f"Resume failed on wake: {e}, retrying...")
+                time.sleep(5)
+                continue
             claude_result = self.claude.monitor(log_start)
             if claude_result.timed_out:
                 return None
