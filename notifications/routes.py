@@ -54,13 +54,12 @@ def _collect_due_reminders(notifications):
                         "created_at": r["created_at"],
                     })
             elif r["trigger_time"] <= now_iso:
-                if r["trigger_time"] < stale_cutoff:
-                    conn.execute(
-                        "UPDATE reminders SET fired = 1 WHERE id = ?",
-                        (r["id"],),
-                    )
-                    conn.commit()
-                else:
+                conn.execute(
+                    "UPDATE reminders SET fired = 1 WHERE id = ?",
+                    (r["id"],),
+                )
+                conn.commit()
+                if r["trigger_time"] >= stale_cutoff:
                     notifications.append({
                         "type": "reminder",
                         "id": r["id"],
