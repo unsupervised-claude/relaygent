@@ -27,7 +27,6 @@ class ClaudeResult:
     incomplete: bool = False
     context_pct: float = 0.0
 
-
 class ClaudeProcess:
     """Manages Claude subprocess with hang detection."""
 
@@ -41,7 +40,10 @@ class ClaudeProcess:
 
     def _get_log_lines(self) -> int:
         try:
-            return sum(1 for _ in open(LOG_FILE)) if LOG_FILE.exists() else 0
+            if not LOG_FILE.exists():
+                return 0
+            with open(LOG_FILE) as f:
+                return sum(1 for _ in f)
         except OSError:
             return 0
 
@@ -51,16 +53,15 @@ class ClaudeProcess:
                 return False
             with open(LOG_FILE) as f:
                 content = "".join(f.readlines()[log_start:])
-            return "No messages returned" in content or "API Error" in content
+            return any(s in content for s in ("No messages returned", "API Error"))
         except OSError:
             return False
 
     def get_context_fill(self) -> float:
         try:
-            if CONTEXT_PCT_FILE.exists():
-                pct = float(CONTEXT_PCT_FILE.read_text().strip())
-                if pct > 0:
-                    return pct
+            pct = float(CONTEXT_PCT_FILE.read_text().strip()) if CONTEXT_PCT_FILE.exists() else 0
+            if pct > 0:
+                return pct
         except (OSError, ValueError):
             pass
         return get_context_fill_from_jsonl(self.session_id, self.workspace)
@@ -74,8 +75,7 @@ class ClaudeProcess:
             self.process.wait(timeout=5)
             return
         except subprocess.TimeoutExpired:
-            pass
-        log("Graceful terminate failed, killing...")
+            log("Graceful terminate failed, killing...")
         self.process.kill()
         try:
             self.process.wait(timeout=10)
@@ -119,22 +119,20 @@ class ClaudeProcess:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
         settings_file = str(Path(__file__).parent / "settings.json")
+        cmd = ["claude", "--resume", self.session_id,
+               "--print", "--dangerously-skip-permissions", "--settings", settings_file]
         try:
             self.process = subprocess.Popen(
-                ["claude",
-                 "--resume", self.session_id,
-                 "--print", "--dangerously-skip-permissions",
-                 "--settings", settings_file],
-                stdin=subprocess.PIPE,
-                stdout=self._log_file,
-                stderr=subprocess.STDOUT,
-                cwd=str(self.workspace),
-            )
+                cmd, stdin=subprocess.PIPE, stdout=self._log_file,
+                stderr=subprocess.STDOUT, cwd=str(self.workspace))
         except OSError:
             self._close_log()
             raise
-        self.process.stdin.write(message.encode())
-        self.process.stdin.close()
+        try:
+            self.process.stdin.write(message.encode())
+            self.process.stdin.close()
+        except (BrokenPipeError, OSError):
+            log("WARNING: Could not write to Claude stdin (process may have exited)")
         return log_start
 
     def monitor(self, log_start: int) -> ClaudeResult:
@@ -188,8 +186,7 @@ class ClaudeProcess:
             except subprocess.TimeoutExpired:
                 log("WARNING: Process stuck after monitor, force killing")
                 self.process.kill()
-                self.process.wait()  # Reap immediately; SIGKILL should be near-instant
-
+                self.process.wait()
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
         return ClaudeResult(
