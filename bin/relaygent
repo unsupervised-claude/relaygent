@@ -11,7 +11,12 @@ load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo -e "${RED}Not set up yet. Run: ./setup.sh${NC}"; exit 1
     fi
-    eval "$(python3 -c "import json;c=json.load(open('$CONFIG_FILE'));s=c['services'];print(f'HUB_PORT={c[\"hub\"][\"port\"]}\nFORUM_PORT={s[\"forum\"][\"port\"]}\nNOTIF_PORT={s[\"notifications\"][\"port\"]}\nHS_PORT={s.get(\"hammerspoon\",{}).get(\"port\",8097)}\nDATA_DIR={c[\"paths\"][\"data\"]}\nKB_DIR={c[\"paths\"][\"kb\"]}')")"
+    eval "$(python3 -c "
+import json,shlex;c=json.load(open('$CONFIG_FILE'));s=c['services']
+for k,v in[('HUB_PORT',c['hub']['port']),('FORUM_PORT',s['forum']['port']),
+('NOTIF_PORT',s['notifications']['port']),('HS_PORT',s.get('hammerspoon',{}).get('port',8097)),
+('DATA_DIR',c['paths']['data']),('KB_DIR',c['paths']['kb'])]:print(f'{k}={shlex.quote(str(v))}')
+")"
     export RELAYGENT_DATA_DIR="$DATA_DIR" RELAYGENT_KB_DIR="$KB_DIR" RELAYGENT_HUB_PORT="$HUB_PORT"
     export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
 }
@@ -24,11 +29,9 @@ check_port() {
         pids=$(ss -tlnp "sport = :$port" 2>/dev/null | awk 'NR>1{match($0,/pid=([0-9]+)/,a); if(a[1]) print a[1]}' | head -3)
     fi
     if [ -n "$pids" ]; then
-        echo -e "  ${RED}Port $port ($name) is already in use (pid $pids)${NC}"
-        echo -e "  ${YELLOW}Kill it with: kill $pids${NC}"
+        echo -e "  ${RED}Port $port ($name) in use (pid $pids).${NC} Kill: ${YELLOW}kill $pids${NC}"
         return 1
     fi
-    return 0
 }
 
 ensure_venv() {
@@ -88,7 +91,7 @@ check_process() {
 do_start() {
     load_config
     echo -e "${CYAN}Starting Relaygent...${NC}"
-    local port_ok=true  # Check all ports before starting anything
+    local port_ok=true
     check_port "$HUB_PORT" "Hub" || port_ok=false
     check_port "$FORUM_PORT" "Forum" || port_ok=false
     check_port "$NOTIF_PORT" "Notifications" || port_ok=false
@@ -163,10 +166,9 @@ do_stop() {
             echo -e "  $name orphan (port $port): ${YELLOW}killed${NC}" || true
     done
     # Kill MCP servers and notification poller
-    for label_pat in "MCP servers:mcp-chat\.mjs|mcp-server\.mjs" "Notification poller:notification-poller"; do
-        local label="${label_pat%%:*}" pat="${label_pat#*:}"
+    for pat in "mcp-chat\.mjs|mcp-server\.mjs" "notification-poller"; do
         local pids; pids=$(pgrep -f "$pat" 2>/dev/null) || true
-        [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  $label: ${YELLOW}cleaned up${NC}" || true
+        [ -n "$pids" ] && kill $pids 2>/dev/null || true
     done
     rm -f "$SCRIPT_DIR/harness/.relay.lock"
 }
@@ -179,11 +181,8 @@ do_status() {
     check_process "Forum" "forum"
     check_process "Notifications" "notifications"
     if [ "$(uname)" = "Darwin" ]; then
-        if pgrep -x Hammerspoon >/dev/null 2>&1; then
-            echo -e "  Hammerspoon: ${GREEN}running${NC}"
-        else
-            echo -e "  Hammerspoon: ${RED}stopped${NC}"
-        fi
+        pgrep -x Hammerspoon >/dev/null 2>&1 && echo -e "  Hammerspoon: ${GREEN}running${NC}" \
+            || echo -e "  Hammerspoon: ${RED}stopped${NC}"
     elif [ "$(uname)" = "Linux" ]; then
         check_process "Computer-use" "computer-use"
     fi

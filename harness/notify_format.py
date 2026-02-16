@@ -23,15 +23,32 @@ def format_reminders(notifs: list) -> list[str]:
     return parts
 
 
+def format_unknown(notifs: list) -> list[str]:
+    """Format unrecognized notification types."""
+    parts = []
+    for n in notifs:
+        ntype = n.get("type", "unknown")
+        msg = n.get("message", n.get("content", str(n)))
+        parts.append(f"[{ntype}] {msg}")
+    return parts
+
+
+FORMATTERS = {
+    "message": format_chat,
+    "reminder": format_reminders,
+}
+
+
 def format_notifications(notifications: list) -> str:
     """Format all notifications into a single wake message."""
-    by_type = {}
+    by_type: dict[str, list] = {}
     for n in notifications:
         t = n.get("type", "unknown")
         by_type.setdefault(t, []).append(n)
 
     parts = []
-    parts.extend(format_chat(by_type.get("message", [])))
-    parts.extend(format_reminders(by_type.get("reminder", [])))
+    for ntype, notifs in by_type.items():
+        formatter = FORMATTERS.get(ntype, format_unknown)
+        parts.extend(formatter(notifs))
 
     return "\n\n---\n\n".join(parts)
