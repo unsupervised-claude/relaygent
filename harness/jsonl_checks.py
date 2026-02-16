@@ -37,7 +37,7 @@ def get_jsonl_size(session_id: str, workspace: Path) -> int:
         return 0
 
 
-def _read_tail(jsonl: Path, bytes_count: int = 16384) -> list[str]:
+def _read_tail(jsonl: Path, bytes_count: int = 65536) -> list[str]:
     """Read last N bytes of a JSONL file and return lines."""
     try:
         with open(jsonl, 'rb') as f:
@@ -117,7 +117,7 @@ def get_context_fill_from_jsonl(session_id: str, workspace: Path) -> float:
     if not jsonl or not jsonl.exists():
         return 0.0
     try:
-        lines = _read_tail(jsonl, 8192)
+        lines = _read_tail(jsonl)
         for line in reversed(lines):
             if not line.strip():
                 continue

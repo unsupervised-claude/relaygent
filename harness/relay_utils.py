@@ -28,16 +28,17 @@ def acquire_lock() -> int:
 
 
 def kill_orphaned_claudes() -> None:
-    """Kill any leftover claude --resume processes."""
+    """Kill any leftover claude --resume/--print processes."""
     result = subprocess.run(
-        ["pgrep", "-f", "claude --resume"],
+        ["pgrep", "-f", "claude.*--print.*--session-id"],
         capture_output=True, text=True
     )
     if result.returncode == 0 and result.stdout.strip():
-        for pid in result.stdout.strip().split('\n'):
+        for pid_str in result.stdout.strip().split('\n'):
             try:
-                os.kill(int(pid), signal.SIGKILL)
-                log(f"Killed orphaned claude process {pid}")
+                pid = int(pid_str)
+                os.kill(pid, signal.SIGTERM)
+                log(f"Sent SIGTERM to orphaned claude process {pid}")
             except (ProcessLookupError, ValueError):
                 pass
 
