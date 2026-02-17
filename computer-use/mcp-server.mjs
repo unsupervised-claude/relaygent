@@ -1,191 +1,200 @@
 #!/usr/bin/env node
-// MCP server for computer-use via Hammerspoon
-// Tools auto-return screenshots after actions for immediate visual feedback
+// MCP server for computer-use
+// Backends: Hammerspoon (macOS/Linux) or Android (ADB) via ANDROID_COMPUTER_USE=1
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { platform } from "node:os";
-import { hsCall, takeScreenshot, runOsascript, findElements, clickElement, checkHealth, SCREENSHOT_PATH } from "./hammerspoon.mjs";
+import { registerDesktopTools } from "./tools-desktop.mjs";
+
+const IS_ANDROID = process.env.ANDROID_COMPUTER_USE === "1";
 const IS_LINUX = platform() === "linux";
+
+let backend;
+if (IS_ANDROID) {
+	backend = await import("./android.mjs");
+} else {
+	backend = await import("./hammerspoon.mjs");
+}
 
 const server = new McpServer({ name: "computer-use", version: "1.0.0" });
 const n = z.coerce.number();
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
-const ACTION_DELAY = 1500;
-const actionRes = async (text, delay, indicator) => ({
-	content: [{ type: "text", text }, ...await takeScreenshot(delay ?? ACTION_DELAY, indicator)]
-});
+const ACTION_DELAY = IS_ANDROID ? 800 : 1500;
+
+async function actionRes(text, delayMs) {
+	const d = delayMs ?? ACTION_DELAY;
+	const blocks = IS_ANDROID ? await backend.takeScreenshotBlocks(d) : await backend.takeScreenshot(d);
+	return { content: [{ type: "text", text }, ...blocks] };
+}
 
 server.tool("screenshot", "Capture screenshot. Use find_elements for precise coordinates.",
-	{ x: n.optional().describe("Crop X"), y: n.optional().describe("Crop Y"),
-		w: n.optional().describe("Crop width"), h: n.optional().describe("Crop height") },
+	{ x: n.optional(), y: n.optional(), w: n.optional(), h: n.optional() },
 	async ({ x, y, w, h }) => {
-		const body = { path: SCREENSHOT_PATH };
-		if (x !== null && y !== null && w !== null && h !== null) Object.assign(body, { x, y, w, h });
-		const r = await hsCall("POST", "/screenshot", body);
-		if (r.error) return { content: [{ type: "text", text: JSON.stringify(r) }] };
+		let label = "Android";
+		if (!IS_ANDROID) {
+			const body = { path: backend.SCREENSHOT_PATH };
+			if (x !== undefined && y !== undefined && w !== undefined && h !== undefined)
+				Object.assign(body, { x, y, w, h });
+			const r = await backend.hsCall("POST", "/screenshot", body);
+			if (r.error) return jsonRes(r);
+			label = `${r.width}x${r.height}px`;
+		} else {
+			if (!backend.takeScreenshot()) return jsonRes({ error: "Screenshot failed" });
+		}
 		try {
-			const img = readFileSync(SCREENSHOT_PATH).toString("base64");
+			const img = readFileSync(backend.SCREENSHOT_PATH).toString("base64");
 			return { content: [
 				{ type: "image", data: img, mimeType: "image/png" },
-				{ type: "text", text: `Screenshot: ${r.width}x${r.height}px` },
+				{ type: "text", text: `Screenshot: ${label}` },
 			] };
-		} catch { return { content: [{ type: "text", text: JSON.stringify(r) }] }; }
+		} catch { return jsonRes({ error: "Could not read screenshot" }); }
 	}
 );
 
-server.tool("click", "Click at coordinates. Auto-returns screenshot.",
+server.tool("click", "Tap/click at coordinates. Auto-returns screenshot.",
 	{ x: n.describe("X"), y: n.describe("Y"),
-		right: z.boolean().optional().describe("Right-click"),
-		double: z.boolean().optional().describe("Double-click"),
-		modifiers: z.array(z.string()).optional().describe("Modifier keys: shift, cmd, alt, ctrl") },
-	async (p) => { await hsCall("POST", "/click", p); return actionRes(`Clicked (${p.x},${p.y})`, 400, {x: p.x, y: p.y}); }
+		right: z.boolean().optional(), double: z.boolean().optional(),
+		modifiers: z.array(z.string()).optional() },
+	async (p) => {
+		if (IS_ANDROID) {
+			if (p.double) { backend.click(p.x, p.y); await new Promise(r => setTimeout(r, 100)); }
+			backend.click(p.x, p.y);
+			return actionRes(`Tapped (${p.x},${p.y})`, 600);
+		}
+		await backend.hsCall("POST", "/click", p);
+		return actionRes(`Clicked (${p.x},${p.y})`, 400);
+	}
 );
 
-server.tool("click_sequence", "Multiple clicks in one call. Auto-returns screenshot.",
+server.tool("click_sequence", "Multiple taps/clicks in one call. Auto-returns screenshot.",
 	{ clicks: z.array(z.object({
-		x: n.describe("X"), y: n.describe("Y"),
-		right: z.boolean().optional(), double: z.boolean().optional(),
+		x: n, y: n, right: z.boolean().optional(), double: z.boolean().optional(),
 		modifiers: z.array(z.string()).optional(),
 		delay: n.optional().describe("Delay after click ms (default: 300)"),
-	})).describe("Array of clicks") },
+	})) },
 	async ({ clicks }) => {
 		for (const c of clicks) {
-			await hsCall("POST", "/click", { x: c.x, y: c.y, right: c.right, double: c.double, modifiers: c.modifiers });
+			if (IS_ANDROID) backend.click(c.x, c.y);
+			else await backend.hsCall("POST", "/click", c);
 			await new Promise(r => setTimeout(r, c.delay ?? 300));
 		}
-		const l = clicks[clicks.length - 1];
-		return actionRes(`Clicked ${clicks.length} points`, 400, {x: l.x, y: l.y});
+		return actionRes(`Tapped ${clicks.length} points`, 400);
 	}
 );
 
-server.tool("drag", "Drag from one point to another. Auto-returns screenshot.",
-	{ startX: n.describe("Start X"), startY: n.describe("Start Y"),
-		endX: n.describe("End X"), endY: n.describe("End Y"),
-		steps: n.optional().describe("Interpolation steps (default: 10)"),
-		duration: n.optional().describe("Duration secs (default: 0.3)") },
+server.tool("drag", "Drag/swipe from one point to another. Auto-returns screenshot.",
+	{ startX: n, startY: n, endX: n, endY: n,
+		steps: n.optional(), duration: n.optional().describe("Duration secs (default: 0.3)") },
 	async (p) => {
-		await hsCall("POST", "/drag", p);
-		return actionRes(`Dragged (${p.startX},${p.startY}) to (${p.endX},${p.endY})`, ((p.duration||0.3)+0.15)*1000);
+		const ms = Math.round((p.duration || 0.3) * 1000);
+		if (IS_ANDROID) backend.drag(p.startX, p.startY, p.endX, p.endY, ms);
+		else await backend.hsCall("POST", "/drag", p);
+		return actionRes(`Dragged (${p.startX},${p.startY}) to (${p.endX},${p.endY})`, ms + 150);
 	}
 );
 
 server.tool("type_text", "Type text or press keys. Auto-returns screenshot.",
-	{ text: z.string().optional().describe("Text to type"),
-		key: z.string().optional().describe("Key name (return, tab, escape, etc)"),
-		modifiers: z.array(z.string()).optional().describe("Modifier keys") },
-	async (p) => { const r = await hsCall("POST", "/type", p); return actionRes(JSON.stringify(r)); }
+	{ text: z.string().optional(), key: z.string().optional(),
+		modifiers: z.array(z.string()).optional() },
+	async (p) => {
+		if (IS_ANDROID) {
+			if (p.text) backend.typeText(p.text);
+			if (p.key) backend.pressKey(p.key);
+			return actionRes(`Typed "${p.text || p.key}"`, 400);
+		}
+		const r = await backend.hsCall("POST", "/type", p);
+		return actionRes(JSON.stringify(r));
+	}
 );
 
 server.tool("type_sequence", "Multiple type/key actions in one call. Auto-returns screenshot.",
 	{ actions: z.array(z.object({
 		text: z.string().optional(), key: z.string().optional(),
-		modifiers: z.array(z.string()).optional(),
-		delay: n.optional().describe("Delay after action ms (default: 50)"),
-	})).describe("Array of type actions") },
+		modifiers: z.array(z.string()).optional(), delay: n.optional(),
+	})) },
 	async ({ actions }) => {
 		for (const a of actions) {
-			await hsCall("POST", "/type", { text: a.text, key: a.key, modifiers: a.modifiers });
+			if (IS_ANDROID) {
+				if (a.text) backend.typeText(a.text);
+				if (a.key) backend.pressKey(a.key);
+			} else { await backend.hsCall("POST", "/type", a); }
 			await new Promise(r => setTimeout(r, a.delay ?? 50));
 		}
 		return actionRes(`Executed ${actions.length} type actions`);
 	}
 );
 
-server.tool("scroll", "Scroll at position. Use repeat for long scrolling. Auto-returns screenshot.",
-	{ x: n.optional().describe("X"), y: n.optional().describe("Y"),
-		direction: z.enum(["up", "down"]).optional().describe("Direction (default: down)"),
-		amount: n.optional().describe("Scroll units (default: 3)"),
-		repeat: n.optional().describe("Number of scroll events (default: 1)") },
+server.tool("scroll", "Scroll at position. Auto-returns screenshot.",
+	{ x: n.optional(), y: n.optional(), direction: z.enum(["up", "down"]).optional(),
+		amount: n.optional(), repeat: n.optional() },
 	async ({ x, y, direction, amount, repeat: reps }) => {
-		const scrollAmt = (amount || 3) * (direction === "up" ? -1 : 1);
-		await hsCall("POST", "/scroll", { x, y, amount: scrollAmt, repeat: reps || 1 });
-		return actionRes(`Scrolled ${direction || "down"} x${reps || 1}`, ((reps||1)-1)*50+200);
+		const dir = direction || "down"; const r = reps || 1;
+		if (IS_ANDROID) {
+			for (let i = 0; i < r; i++) {
+				backend.scroll(x ?? 540, y ?? 900, dir, amount || 3);
+				if (r > 1) await new Promise(res => setTimeout(res, 100));
+			}
+			return actionRes(`Scrolled ${dir} x${r}`, 400);
+		}
+		await backend.hsCall("POST", "/scroll", { x, y, amount: (amount||3)*(dir==="up"?-1:1), repeat: r });
+		return actionRes(`Scrolled ${dir} x${r}`, (r-1)*50+200);
 	}
 );
 
-server.tool("type_from_file", "Type text from file (secure password entry). Auto-screenshots.",
-	{ path: z.string().describe("Path to file") },
-	async ({ path }) => { const r = await hsCall("POST", "/type_from_file", { path }); return actionRes(JSON.stringify(r)); }
+server.tool("find_elements", "Search UI elements by title/text. On Android uses uiautomator.",
+	{ role: z.string().optional(), title: z.string().optional(),
+		app: z.string().optional(), limit: n.optional() },
+	async (p) => jsonRes(IS_ANDROID ? backend.findElements(p) : await backend.findElements(p))
 );
 
-server.tool("launch_app", "Launch or activate an application. Auto-returns screenshot.",
-	{ app: z.string().describe("Application name") },
-	async ({ app }) => { await hsCall("POST", "/launch", { app }); return actionRes(`Launched ${app}`, 500); }
-);
-
-server.tool("focus_window", "Focus a window by app name. Auto-returns screenshot.",
-	{ window_id: n.optional().describe("Window ID"), app: z.string().optional().describe("App name") },
-	async (p) => { const r = await hsCall("POST", "/focus", p); return actionRes(JSON.stringify(r), 200); }
-);
-
-server.tool("windows", "List all visible windows with positions", {},
-	async () => jsonRes(await hsCall("GET", "/windows")));
-server.tool("apps", "List running applications", {},
-	async () => jsonRes(await hsCall("GET", "/apps")));
-server.tool("element_at", "Get UI element info at screen coordinates",
-	{ x: n.describe("X"), y: n.describe("Y") },
-	async (p) => jsonRes(await hsCall("POST", "/element_at", p)));
-server.tool("accessibility_tree", "Get accessibility tree of focused or named app",
-	{ app: z.string().optional().describe("App name (default: frontmost)"),
-		depth: n.optional().describe("Max tree depth (default: 4)") },
-	async (p) => jsonRes(await hsCall("POST", "/accessibility", p, 30000)));
-server.tool("find_elements", "Search UI elements by role/title in accessibility tree",
-	{ role: z.string().optional().describe("AX role (e.g. AXButton)"),
-		title: z.string().optional().describe("Title substring (case-insensitive)"),
-		app: z.string().optional().describe("App name (default: frontmost)"),
-		limit: n.optional().describe("Max results (default: 30)") },
-	async (p) => jsonRes(await findElements(p)));
-
-server.tool("click_element", "Find UI element by title/role and click it. Auto-returns screenshot.",
-	{ title: z.string().optional().describe("Title substring"),
-		role: z.string().optional().describe("AX role (e.g. AXButton)"),
-		app: z.string().optional().describe("App name (default: frontmost)"),
-		index: n.optional().describe("Which match to click (default: 0)") },
+server.tool("click_element", "Find UI element by title and tap/click it. Auto-returns screenshot.",
+	{ title: z.string().optional(), role: z.string().optional(),
+		app: z.string().optional(), index: n.optional() },
 	async (p) => {
-		const r = await clickElement(p);
+		if (IS_ANDROID) {
+			const { elements } = backend.findElements({ title: p.title, limit: 10 });
+			if (!elements.length) return jsonRes({ error: `No element matching "${p.title}"` });
+			const el = elements[Math.min(p.index || 0, elements.length - 1)];
+			backend.click(el.center.x, el.center.y);
+			return actionRes(`Tapped "${p.title}" at (${el.center.x},${el.center.y})`, 600);
+		}
+		const r = await backend.clickElement(p);
 		if (r.error) return jsonRes(r);
 		if (r.method === "AXPress") return actionRes(`Pressed "${r.element.title}" via AXPress`, 500);
-		return actionRes(`Clicked "${r.element.title}" at (${r.coords.x},${r.coords.y})`, 400, r.coords);
+		return actionRes(`Clicked "${r.element.title}" at (${r.coords.x},${r.coords.y})`, 400);
 	}
 );
 
-server.tool("browser_navigate", "Navigate browser to a URL. Auto-returns screenshot.",
-	{ url: z.string().describe("URL to navigate to"),
-		new_tab: z.boolean().optional().describe("Open in new tab") },
+server.tool("launch_app", "Launch app by package name (Android) or app name (macOS/Linux).",
+	{ app: z.string() },
+	async ({ app }) => {
+		if (IS_ANDROID) { backend.launchApp(app); return actionRes(`Launched ${app}`, 1000); }
+		await backend.hsCall("POST", "/launch", { app });
+		return actionRes(`Launched ${app}`, 500);
+	}
+);
+
+server.tool("browser_navigate", "Navigate browser to URL. Auto-returns screenshot.",
+	{ url: z.string(), new_tab: z.boolean().optional() },
 	async ({ url, new_tab }) => {
+		if (IS_ANDROID) { backend.browseUrl(url); return actionRes(`Navigated to ${url}`, 2000); }
 		const mod = IS_LINUX ? "ctrl" : "cmd";
-		const browser = IS_LINUX ? "google-chrome" : "Google Chrome";
-		await hsCall("POST", "/launch", { app: browser });
+		await backend.hsCall("POST", "/launch", { app: IS_LINUX ? "google-chrome" : "Google Chrome" });
 		await new Promise(r => setTimeout(r, 300));
-		await hsCall("POST", "/type", { key: new_tab ? "t" : "l", modifiers: [mod] });
+		await backend.hsCall("POST", "/type", { key: new_tab ? "t" : "l", modifiers: [mod] });
 		await new Promise(r => setTimeout(r, 200));
-		await hsCall("POST", "/type", { text: url });
+		await backend.hsCall("POST", "/type", { text: url });
 		await new Promise(r => setTimeout(r, 100));
-		await hsCall("POST", "/type", { key: "return" });
+		await backend.hsCall("POST", "/type", { key: "return" });
 		return actionRes(`Navigated to ${url}`, 1500);
 	}
 );
 
-server.tool("applescript", "Run AppleScript via osascript.",
-	{ code: z.string().describe("AppleScript code") },
-	async ({ code }) => {
-		let r = await runOsascript(code);
-		for (let i = 0; i < 3 && r.timedOut; i++) {
-			await hsCall("POST", "/type", { key: "return" }, 3000).catch(() => {});
-			await new Promise(res => setTimeout(res, 1000));
-			r = await runOsascript(code);
-			if (!r.timedOut) break;
-		}
-		return jsonRes(r);
-	}
-);
+if (!IS_ANDROID) registerDesktopTools(server, backend, actionRes, IS_LINUX);
 
-server.tool("reload_config", "Reload Hammerspoon config", {},
-	async () => jsonRes(await hsCall("POST", "/reload")));
-
-await checkHealth();
+await backend.checkHealth();
 const transport = new StdioServerTransport();
 await server.connect(transport);

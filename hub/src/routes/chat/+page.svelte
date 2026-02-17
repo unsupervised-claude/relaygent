@@ -161,7 +161,7 @@
 </div>
 
 <style>
-	.chat-container { display: flex; flex-direction: column; height: calc(100vh - 8em); max-height: 800px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+	.chat-container { display: flex; flex-direction: column; height: calc(100dvh - 8em); max-height: 800px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 	.chat-messages { flex: 1; overflow-y: auto; padding: 1em; display: flex; flex-direction: column; gap: 0.5em; }
 	.loading, .date-sep { text-align: center; font-size: 0.75em; color: var(--text-muted); }
 	.loading { padding: 0.5em; }
@@ -183,7 +183,8 @@
 	.chat-input button:hover:not(:disabled) { opacity: 0.9; }
 	.chat-input button:disabled { opacity: 0.5; cursor: not-allowed; }
 	@media (max-width: 600px) {
-		.chat-container { height: calc(100vh - 6em); max-height: none; border-radius: 0; border-left: none; border-right: none; }
-		.bubble { max-width: 85%; }
+		.chat-container { height: calc(100dvh - 6em); max-height: none; border-radius: 0; border-left: none; border-right: none; }
+		.bubble { max-width: 88%; }
+		.chat-input textarea { font-size: 16px; } /* prevent iOS/Android zoom on focus */
 	}
 </style>
