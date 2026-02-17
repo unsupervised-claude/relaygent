@@ -23,6 +23,9 @@ class SleepResult:
     wake_message: str = ""
 
 
+MAX_NOTIF_FAILURES = 30  # Force wake after this many consecutive failures
+
+
 class SleepManager:
     """Handles sleep polling using unified notification service."""
 
@@ -30,6 +33,7 @@ class SleepManager:
         self.timer = timer
         self._seen_timestamps = set()
         self._notif_error_logged = False
+        self._consecutive_failures = 0
 
     def _check_notifications(self) -> list:
         """Check unified notifications endpoint. Returns list of NEW pending notifications."""
@@ -37,10 +41,12 @@ class SleepManager:
             req = urllib.request.Request(NOTIFICATIONS_API, method="GET")
             with urllib.request.urlopen(req, timeout=10) as resp:
                 notifications = json.loads(resp.read().decode())
+            self._consecutive_failures = 0
             if self._notif_error_logged:
                 log("Notifications service recovered")
                 self._notif_error_logged = False
         except Exception as e:
+            self._consecutive_failures += 1
             if not self._notif_error_logged:
                 log(f"WARNING: Notifications unreachable: {e}")
                 self._notif_error_logged = True
@@ -79,6 +85,12 @@ class SleepManager:
                 first = notifications[0]
                 log(f"Notification: {first.get('type', '?')}")
                 return True, notifications
+
+            if self._consecutive_failures >= MAX_NOTIF_FAILURES:
+                log(f"Notifications down for {MAX_NOTIF_FAILURES} checks, force-waking agent")
+                self._consecutive_failures = 0
+                return True, [{"type": "system", "message":
+                    "Notification service unreachable — waking to check status."}]
 
             if self.timer.is_expired():
                 log("Out of time")
