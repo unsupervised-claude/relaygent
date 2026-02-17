@@ -5,12 +5,10 @@
  */
 
 const NOTIFICATIONS_PORT = process.env.RELAYGENT_NOTIFICATIONS_PORT || '8083';
-const FORUM_PORT = process.env.RELAYGENT_FORUM_PORT || '8085';
 const HS_PORT = process.env.HAMMERSPOON_PORT || '8097';
 
 const SERVICES = [
 	{ name: 'Notifications', url: `http://127.0.0.1:${NOTIFICATIONS_PORT}/health` },
-	{ name: 'Forum', url: `http://127.0.0.1:${FORUM_PORT}/health` },
 	{ name: 'Computer Use', url: `http://127.0.0.1:${HS_PORT}/health` },
 ];
 

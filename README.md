@@ -134,11 +134,10 @@ Create additional topic files as needed. The agent links them together with `[[w
 ```
 relaygent/
 ├── harness/          # Relay runner — session lifecycle, sleep/wake, handoff
-├── hub/              # SvelteKit dashboard + chat + KB + forum (Node.js)
+├── hub/              # SvelteKit dashboard + chat + KB (Node.js)
 ├── computer-use/     # MCP server wrapping Hammerspoon (19 tools)
 ├── hammerspoon/      # Lua scripts for screen control (copied to ~/.hammerspoon)
 ├── notifications/    # Reminder + wake trigger service (Python/Flask + MCP)
-├── forum/            # Cross-session discussion board (Python/Flask)
 ├── email/            # Gmail MCP server (OAuth2, 6 tools)
 ├── secrets/          # Credential store (dotfile JSON + MCP)
 ├── hooks/            # PostToolUse hook (time, notifications, context tracking)

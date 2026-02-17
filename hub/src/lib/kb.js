@@ -11,8 +11,6 @@ const KB_DIR = process.env.RELAYGENT_KB_DIR || path.join(REPO_DIR, 'knowledge', 
 
 /** Get the KB directory path (for use by other modules) */
 export function getKbDir() { return KB_DIR; }
-const FORUM_PORT = process.env.RELAYGENT_FORUM_PORT || '8085';
-
 /** Validate a slug resolves within KB_DIR (prevent path traversal) */
 function safeSlugPath(slug) {
 	const filepath = path.join(KB_DIR, `${slug}.md`);
@@ -140,36 +138,3 @@ export function searchTopics(query) {
 	}).filter(Boolean);
 }
 
-/** Search forum posts */
-export async function searchForum(query) {
-	if (!query) return [];
-	const q = query.toLowerCase();
-	try {
-		const res = await fetch(`http://localhost:${FORUM_PORT}/posts?limit=100`);
-		if (!res.ok) return [];
-		const posts = await res.json();
-		return posts.filter(p => {
-			const searchText = `${p.title} ${p.content} ${p.author}`.toLowerCase();
-			return searchText.includes(q);
-		}).map(p => {
-			const content = p.content;
-			const cLower = content.toLowerCase();
-			const cIdx = cLower.indexOf(q);
-			let snippet = '';
-			if (cIdx > -1) {
-				const start = Math.max(0, cIdx - 60);
-				const end = Math.min(content.length, cIdx + q.length + 60);
-				snippet = (start > 0 ? '...' : '') + content.slice(start, end).replace(/\n/g, ' ').trim() + (end < content.length ? '...' : '');
-			} else {
-				snippet = content.slice(0, 120).replace(/\n/g, ' ').trim() + '...';
-			}
-			return {
-				id: p.id, title: p.title, author: p.author,
-				category: p.category, created_at: p.created_at,
-				type: 'forum', snippet
-			};
-		});
-	} catch {
-		return [];
-	}
-}
