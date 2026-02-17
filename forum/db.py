@@ -132,42 +132,44 @@ def parse_tags(tags_str: str) -> list[str]:
 
 
 def get_post_score(conn, post_id: int) -> int:
-    result = conn.execute(
-        "SELECT COALESCE(SUM(value), 0) FROM votes WHERE post_id = ?",
-        (post_id,),
-    ).fetchone()
-    return result[0] if result else 0
+    r = conn.execute("SELECT COALESCE(SUM(value),0) FROM votes WHERE post_id=?", (post_id,)).fetchone()
+    return r[0] if r else 0
 
 
 def get_comment_score(conn, comment_id: int) -> int:
-    result = conn.execute(
-        "SELECT COALESCE(SUM(value), 0) FROM votes WHERE comment_id = ?",
-        (comment_id,),
-    ).fetchone()
-    return result[0] if result else 0
+    r = conn.execute("SELECT COALESCE(SUM(value),0) FROM votes WHERE comment_id=?", (comment_id,)).fetchone()
+    return r[0] if r else 0
 
 
 def get_comment_count(conn, post_id: int) -> int:
-    result = conn.execute(
-        "SELECT COUNT(*) FROM comments WHERE post_id = ?", (post_id,)
-    ).fetchone()
-    return result[0] if result else 0
+    r = conn.execute("SELECT COUNT(*) FROM comments WHERE post_id=?", (post_id,)).fetchone()
+    return r[0] if r else 0
 
 
 def get_citation_count(conn, post_id: int) -> int:
-    result = conn.execute(
-        "SELECT COUNT(*) FROM citations WHERE to_post_id = ?", (post_id,)
-    ).fetchone()
-    return result[0] if result else 0
+    r = conn.execute("SELECT COUNT(*) FROM citations WHERE to_post_id=?", (post_id,)).fetchone()
+    return r[0] if r else 0
 
 
 def build_comment_tree(conn, post_id: int) -> list[dict]:
-    """Build nested comment structure."""
+    """Build nested comment structure with batch score lookup."""
     rows = conn.execute(
         "SELECT * FROM comments WHERE post_id = ? "
         "ORDER BY created_at ASC",
         (post_id,),
     ).fetchall()
+    if not rows:
+        return []
+
+    # Batch: fetch all comment scores in one query
+    cids = [r["id"] for r in rows]
+    ph = ",".join("?" * len(cids))
+    score_rows = conn.execute(
+        f"SELECT comment_id, COALESCE(SUM(value), 0) as score "
+        f"FROM votes WHERE comment_id IN ({ph}) GROUP BY comment_id",
+        cids,
+    ).fetchall()
+    scores = {r["comment_id"]: r["score"] for r in score_rows}
 
     comments_by_id = {}
     root_comments = []
@@ -180,7 +182,7 @@ def build_comment_tree(conn, post_id: int) -> list[dict]:
             "author": row["author"],
             "content": row["content"],
             "created_at": row["created_at"],
-            "score": get_comment_score(conn, row["id"]),
+            "score": scores.get(row["id"], 0),
             "replies": [],
         }
         comments_by_id[row["id"]] = comment

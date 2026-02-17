@@ -10,7 +10,6 @@ from config import app
 from db import (
     build_comment_tree,
     get_citation_count,
-    get_comment_count,
     get_db,
     get_post_score,
     parse_tags,
@@ -73,20 +72,32 @@ async def list_posts(
         params.append(limit)
 
         rows = conn.execute(query, params).fetchall()
-        posts = []
+        # Filter by exact tag match (LIKE is approximate)
+        filtered = []
         for row in rows:
             post_tags = parse_tags(row["tags"] or "[]")
             if tag and tag not in post_tags:
                 continue
+            filtered.append((row, post_tags))
+
+        # Batch: 3 queries instead of 3N
+        pids = [r["id"] for r, _ in filtered]
+        scores = _batch_scores(conn, pids)
+        counts = _batch_comment_counts(conn, pids)
+        citations = _batch_citation_counts(conn, pids)
+
+        posts = []
+        for row, post_tags in filtered:
+            pid = row["id"]
             posts.append(PostResponse(
-                id=row["id"], author=row["author"],
+                id=pid, author=row["author"],
                 title=row["title"], content=row["content"],
                 category=row["category"], tags=post_tags,
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
-                score=get_post_score(conn, row["id"]),
-                comment_count=get_comment_count(conn, row["id"]),
-                citation_count=get_citation_count(conn, row["id"]),
+                score=scores.get(pid, 0),
+                comment_count=counts.get(pid, 0),
+                citation_count=citations.get(pid, 0),
             ))
 
         if sort == "top":
@@ -143,3 +154,37 @@ async def delete_post(post_id: int, author: str):
         conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))
         conn.commit()
     return {"status": "deleted", "id": post_id}
+
+
+def _batch_scores(conn, post_ids):
+    if not post_ids:
+        return {}
+    ph = ",".join("?" * len(post_ids))
+    rows = conn.execute(
+        f"SELECT post_id, COALESCE(SUM(value),0) as s "
+        f"FROM votes WHERE post_id IN ({ph}) GROUP BY post_id", post_ids,
+    ).fetchall()
+    return {r["post_id"]: r["s"] for r in rows}
+
+
+def _batch_comment_counts(conn, post_ids):
+    if not post_ids:
+        return {}
+    ph = ",".join("?" * len(post_ids))
+    rows = conn.execute(
+        f"SELECT post_id, COUNT(*) as c "
+        f"FROM comments WHERE post_id IN ({ph}) GROUP BY post_id", post_ids,
+    ).fetchall()
+    return {r["post_id"]: r["c"] for r in rows}
+
+
+def _batch_citation_counts(conn, post_ids):
+    if not post_ids:
+        return {}
+    ph = ",".join("?" * len(post_ids))
+    rows = conn.execute(
+        f"SELECT to_post_id, COUNT(*) as c "
+        f"FROM citations WHERE to_post_id IN ({ph}) GROUP BY to_post_id",
+        post_ids,
+    ).fetchall()
+    return {r["to_post_id"]: r["c"] for r in rows}
