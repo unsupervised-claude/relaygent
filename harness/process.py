@@ -96,18 +96,24 @@ class ClaudeProcess:
 
     def _get_env(self) -> dict:
         env = os.environ.copy()
-        termux_bin = "/data/data/com.termux/files/usr/bin"
+        tbin = "/data/data/com.termux/files/usr/bin"
         path = env.get("PATH", "")
-        if termux_bin not in path:
-            env["PATH"] = termux_bin + (":" + path if path else "")
+        if tbin not in path:
+            env["PATH"] = tbin + (":" + path if path else "")
+        patch = Path(__file__).parent.parent / "computer-use" / "dns-patch.js"
+        if patch.exists():
+            flag = f"--require {patch}"
+            existing = env.get("NODE_OPTIONS", "")
+            if flag not in existing:
+                env["NODE_OPTIONS"] = (existing + " " + flag).strip()
         return env
-
     def _claude_cmd(self, *args: str) -> list[str]:
-        """Resolve claude command, using node+absolute path on Android (no /usr/bin/env)."""
-        claude = shutil.which("claude", path=self._get_env().get("PATH", ""))
+        """Resolve claude command, using node+absolute path on Android."""
+        env_path = self._get_env().get("PATH", "")
+        claude = shutil.which("claude", path=env_path)
         if claude:
             real = os.path.realpath(claude)
-            node = shutil.which("node", path=self._get_env().get("PATH", ""))
+            node = shutil.which("node", path=env_path)
             if node and real.endswith(".js"):
                 return [node, real, *args]
         return ["claude", *args]
@@ -152,11 +158,8 @@ class ClaudeProcess:
             raise
         try:
             if self.process.stdin and not self.process.stdin.closed:
-                self.process.stdin.write(message.encode())
-                self.process.stdin.flush()
-                self.process.stdin.close()
-            else:
-                log("WARNING: stdin unavailable (process may have exited)")
+                self.process.stdin.write(message.encode()); self.process.stdin.flush(); self.process.stdin.close()
+            else: log("WARNING: stdin unavailable (process may have exited)")
         except (BrokenPipeError, OSError) as e:
             log(f"WARNING: Could not write to Claude stdin: {e}")
         return log_start
@@ -182,8 +185,7 @@ class ClaudeProcess:
             if not self._context_warning_sent:
                 fill = self.get_context_fill()
                 if fill >= CONTEXT_THRESHOLD:
-                    log(f"Context at {fill:.0f}% (hook handling wrap-up warning)")
-                    self._context_warning_sent = True
+                    log(f"Context at {fill:.0f}% (hook handling wrap-up warning)"); self._context_warning_sent = True
             rem = self.timer.remaining()
             time.sleep(1 if rem <= 60 else (5 if rem <= 300 else 30))
         if self.process.poll() is None:
