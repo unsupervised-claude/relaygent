@@ -5,8 +5,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFileSync } from "node:fs";
 import { platform } from "node:os";
+import { readFileSync } from "node:fs";
 import { registerDesktopTools } from "./tools-desktop.mjs";
 
 const IS_ANDROID = process.env.ANDROID_COMPUTER_USE === "1";
