@@ -5,6 +5,10 @@ Install: apt install at-spi2-core python3-pyatspi gir1.2-atspi-2.0
 """
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 MAX_NODES = 2000
 SKIP_ROLES = {"panel", "filler", "scroll pane", "split pane", "section"}
 TRY_ACTIONS = ["click", "press", "activate", "open"]
@@ -31,13 +35,13 @@ def _get_app(name):
             for child in app:
                 if child.getState().contains(pyatspi.STATE_ACTIVE):
                     return app, None
-        except Exception:
+        except (RuntimeError, AttributeError):
             continue
     for app in desktop:
         try:
             if app.childCount > 0:
                 return app, None
-        except Exception:
+        except (RuntimeError, AttributeError):
             continue
     return None, "no app found"
 
@@ -47,7 +51,7 @@ def _frame(obj):
         ext = obj.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
         if ext.width > 0 or ext.height > 0:
             return {"x": ext.x, "y": ext.y, "w": ext.width, "h": ext.height}
-    except Exception:
+    except (RuntimeError, AttributeError, NotImplementedError):
         pass
     return None
 
@@ -55,7 +59,7 @@ def _frame(obj):
 def _role(obj):
     try:
         return obj.getRoleName()
-    except Exception:
+    except (RuntimeError, AttributeError):
         return ""
 
 
@@ -66,7 +70,7 @@ def _axrole(role):
 def _attr(obj, attr, default=""):
     try:
         return getattr(obj, attr, default) or default
-    except Exception:
+    except (RuntimeError, AttributeError):
         return default
 
 
@@ -87,7 +91,7 @@ def _build_tree(obj, depth, max_depth, state):
         node["frame"] = frame
     try:
         node["value"] = str(obj.queryValue().currentValue)
-    except Exception:
+    except (RuntimeError, AttributeError, NotImplementedError):
         pass
     children = []
     if depth < max_depth and state["count"] < MAX_NODES:
@@ -98,7 +102,7 @@ def _build_tree(obj, depth, max_depth, state):
                 cn = _build_tree(obj.getChildAtIndex(i), depth + 1, max_depth, state)
                 if cn:
                     children.append(cn)
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
     if children:
         node["children"] = children
@@ -134,7 +138,7 @@ def element_at(params):
                     return {"role": _axrole(_role(obj)),
                             "title": _attr(obj, "name", ""),
                             "value": "", "frame": _frame(obj)}, 200
-        except Exception:
+        except (RuntimeError, AttributeError):
             continue
     return {"error": "no element"}, 404
 
@@ -163,7 +167,7 @@ def _search_press(obj, depth, target, state):
                                     "title": title, "role": rs}
                 return {"pressed": False, "title": title, "role": rs,
                         "error": "no supported action"}
-            except Exception:
+            except (RuntimeError, AttributeError, NotImplementedError):
                 return {"pressed": False, "title": title, "role": rs,
                         "error": "no action interface"}
     try:
@@ -171,7 +175,7 @@ def _search_press(obj, depth, target, state):
             r = _search_press(obj.getChildAtIndex(i), depth + 1, target, state)
             if r:
                 return r
-    except Exception:
+    except (RuntimeError, AttributeError):
         pass
     return None
 
