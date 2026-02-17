@@ -45,12 +45,7 @@ async function main() {
 	// Agent identity
 	const agentNameInput = (await ask(`${C.cyan}Agent name [relaygent]:${C.reset} `)).trim();
 	const agentName = agentNameInput || 'relaygent';
-	const agentEmail = (await ask(`${C.cyan}Agent email (for identity/services):${C.reset} `)).trim();
-	if (!agentEmail) {
-		console.log(`${C.red}Email required — each agent needs an identity.${C.reset}`);
-		rl.close();
-		process.exit(1);
-	}
+	const agentEmail = (await ask(`${C.cyan}Agent email (optional, for identity/services):${C.reset} `)).trim();
 
 	// Secrets vault — encrypted credential storage
 	const masterPassword = (await ask(`${C.cyan}Master password (encrypts stored credentials):${C.reset} `)).trim();
@@ -59,7 +54,9 @@ async function main() {
 		rl.close();
 		process.exit(1);
 	}
-	const emailPassword = (await ask(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim();
+	const emailPassword = agentEmail
+		? (await ask(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim()
+		: '';
 
 	const hubPort = 8080;
 
@@ -71,7 +68,7 @@ async function main() {
 	mkdirSync(DATA_DIR, { recursive: true });
 
 	const config = {
-		agent: { name: agentName, email: agentEmail },
+		agent: { name: agentName, ...(agentEmail && { email: agentEmail }) },
 		hub: { port: hubPort },
 		services: {
 			notifications: { port: hubPort + 3 }, forum: { port: hubPort + 5 },
@@ -107,7 +104,7 @@ async function main() {
 		const gitCmds = [
 			'git init',
 			`git config user.name "${agentName}"`,
-			`git config user.email "${agentEmail}"`,
+			`git config user.email "${agentEmail || `${agentName}@localhost`}"`,
 			'git add -A',
 			'git commit -m "Initial KB"',
 		].join(' && ');
