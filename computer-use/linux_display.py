@@ -1,7 +1,10 @@
 """Display handlers for Linux: screenshot, windows, apps, focus, launch."""
 from __future__ import annotations
 
+import logging
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 def _run(args, timeout=5):
@@ -17,7 +20,7 @@ def screen_size() -> tuple[int, int]:
             if "dimensions:" in line:
                 w, h = line.split()[1].split("x")
                 return int(w), int(h)
-    except Exception:
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
         pass
     try:
         out = _run(["xrandr", "--current"])
@@ -27,7 +30,7 @@ def screen_size() -> tuple[int, int]:
                     if "x" in part and "+" in part:
                         w, h = part.split("+")[0].split("x")
                         return int(w), int(h)
-    except Exception:
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
         pass
     return 1920, 1080
 
@@ -72,15 +75,15 @@ def windows(_params: dict) -> tuple[dict, int]:
                 wins.append({"id": wid, "title": title, "app": "",
                              "frame": {"x": x, "y": y, "w": w, "h": h},
                              "focused": False})
-    except Exception:
-        pass
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
+        logger.debug("wmctrl not available or failed")
     try:
         active = _run(["xdotool", "getactivewindow"])
         active_int = int(active)
         for w in wins:
             if int(w["id"], 16) == active_int:
                 w["focused"] = True
-    except Exception:
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
         pass
     return {"windows": wins}, 200
 
@@ -98,13 +101,13 @@ def apps(_params: dict) -> tuple[dict, int]:
                 if pid:
                     try:
                         name = _run(["ps", "-p", str(pid), "-o", "comm="])
-                    except Exception:
+                    except (subprocess.SubprocessError, FileNotFoundError):
                         pass
                 if name not in seen:
                     seen.add(name)
                     result.append({"name": name, "pid": pid})
-    except Exception:
-        pass
+    except (subprocess.SubprocessError, FileNotFoundError, ValueError):
+        logger.debug("wmctrl not available or failed")
     return {"apps": result}, 200
 
 
@@ -124,7 +127,7 @@ def focus(params: dict) -> tuple[dict, int]:
                 wid = line.split()[0]
                 _run(["wmctrl", "-i", "-a", wid])
                 return {"focused": app}, 200
-    except Exception:
+    except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return {"error": "not found"}, 404
 

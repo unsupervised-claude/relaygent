@@ -36,7 +36,7 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         try:
             return json.loads(self.rfile.read(length))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
 
     def do_GET(self):
