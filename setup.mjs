@@ -47,10 +47,6 @@ async function main() {
 	const agentName = agentNameInput || 'relaygent';
 	const agentEmail = (await ask(`${C.cyan}Agent email (optional, for identity/services):${C.reset} `)).trim();
 
-	const emailPassword = agentEmail
-		? (await ask(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim()
-		: '';
-
 	const hubPort = 8080;
 
 	// Write config
@@ -64,7 +60,7 @@ async function main() {
 		agent: { name: agentName, ...(agentEmail && { email: agentEmail }) },
 		hub: { port: hubPort },
 		services: {
-			notifications: { port: hubPort + 3 }, forum: { port: hubPort + 5 },
+			notifications: { port: hubPort + 3 },
 			hammerspoon: { port: hubPort + 17 },
 		},
 		paths: { repo: REPO_DIR, kb: KB_DIR, logs: LOGS_DIR, data: DATA_DIR },
@@ -115,8 +111,8 @@ async function main() {
 		execSync('npm install', { cwd: join(REPO_DIR, sub), stdio: 'pipe' });
 		console.log(`  ${sub}: ${C.green}deps installed${C.reset}`);
 	}
-	// Install Python dependencies (forum + notifications Flask servers)
-	for (const sub of ['forum', 'notifications']) {
+	// Install Python dependencies (notifications Flask server)
+	for (const sub of ['notifications']) {
 		const dir = join(REPO_DIR, sub);
 		const venv = join(dir, '.venv');
 		console.log(`  Setting up ${sub} Python venv...`);
@@ -136,7 +132,7 @@ async function main() {
 	console.log(`  Hub: ${C.green}built${C.reset}`);
 
 	// Create secrets file and store credentials
-	await setupSecrets(REPO_DIR, emailPassword, C);
+	await setupSecrets(REPO_DIR, C);
 
 	// Set up Hammerspoon (computer-use)
 	await setupHammerspoon(config, REPO_DIR, HOME, C, ask);
