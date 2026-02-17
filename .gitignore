@@ -4,6 +4,8 @@ build/
 __pycache__/
 *.pyc
 .venv/
+.test-venv/
+.pytest_cache/
 *.pid
 package-lock.json
 harness/settings.json
