@@ -54,6 +54,7 @@ def notify_crash(crash_count: int, exit_code: int) -> None:
 def _send_chat_alert(message: str) -> None:
     """Best-effort alert to owner via hub chat."""
     import json
+    import urllib.error
     import urllib.request
     hub_port = os.environ.get("RELAYGENT_HUB_PORT", "8080")
     url = f"http://127.0.0.1:{hub_port}/api/chat"
@@ -63,7 +64,7 @@ def _send_chat_alert(message: str) -> None:
             url, data=data, headers={"Content-Type": "application/json"},
         )
         urllib.request.urlopen(req, timeout=5)
-    except Exception as e:
+    except (urllib.error.URLError, OSError) as e:
         log(f"Chat alert failed (hub may be down): {e}")
 
 
@@ -76,7 +77,7 @@ def commit_kb() -> None:
             env["RELAY_RUN"] = "1"
             subprocess.run([str(commit_script)], env=env, capture_output=True, timeout=30)
             log("KB changes committed")
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
             log(f"KB commit failed: {e}")
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
@@ -87,7 +88,7 @@ class SleepManager:
             ack_url = f"http://127.0.0.1:{NOTIFICATIONS_PORT}/notifications/ack-slack"
             req = urllib.request.Request(ack_url, method="POST", data=b"")
             urllib.request.urlopen(req, timeout=3)
-        except Exception:
+        except (urllib.error.URLError, OSError):
             pass  # Best-effort
 
     def _wait_for_wake(self) -> tuple[bool, list]:
