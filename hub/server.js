@@ -29,6 +29,7 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 const pendingTools = new Map();
+const MAX_PENDING = 200;
 
 function parseSessionLine(line) {
 	try {
@@ -46,6 +47,11 @@ function parseSessionLine(line) {
 						toolUseId: item.id,
 					};
 					pendingTools.set(item.id, activity);
+					// Evict oldest entries if map grows too large
+					if (pendingTools.size > MAX_PENDING) {
+						const oldest = pendingTools.keys().next().value;
+						pendingTools.delete(oldest);
+					}
 					activities.push(activity);
 				} else if (item?.type === 'text' && item.text?.length > 10) {
 					activities.push({ type: 'text', time: entry.timestamp, text: item.text });
