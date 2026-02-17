@@ -16,7 +16,10 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 
-from config import SLEEP_POLL_INTERVAL, Timer, log, set_status
+from config import (
+    CONTEXT_THRESHOLD, INCOMPLETE_BASE_DELAY, MAX_INCOMPLETE_RETRIES,
+    SLEEP_POLL_INTERVAL, Timer, log, set_status,
+)
 from notify_format import format_notifications
 
 NOTIFICATIONS_PORT = os.environ.get("RELAYGENT_NOTIFICATIONS_PORT", "8083")
@@ -150,3 +153,43 @@ class SleepManager:
         set_status("working")
         log("Waking agent...")
         return SleepResult(woken=True, wake_message=wake_message)
+
+    def run_wake_cycle(self, claude):
+        """Sleep/wake loop with retry limits. Returns ClaudeResult if context-full."""
+        while True:
+            result = self.auto_sleep_and_wake()
+            if not result or not result.woken:
+                return None
+            time.sleep(3)
+            try:
+                log_start = claude.resume(result.wake_message)
+            except OSError as e:
+                log(f"Resume failed on wake: {e}, retrying...")
+                time.sleep(5)
+                continue
+            claude_result = claude.monitor(log_start)
+            if claude_result.timed_out:
+                return None
+            wake_retries = 0
+            while claude_result.incomplete or claude_result.hung or claude_result.no_output:
+                if self.timer.is_expired():
+                    return None
+                wake_retries += 1
+                if wake_retries > MAX_INCOMPLETE_RETRIES:
+                    log(f"Too many wake retries ({wake_retries}), giving up on this wake cycle")
+                    break
+                delay = min(INCOMPLETE_BASE_DELAY * (2 ** (wake_retries - 1)), 60)
+                kind = "Hung during wake" if claude_result.hung else "Exited mid-conversation during wake"
+                log(f"{kind} ({wake_retries}/{MAX_INCOMPLETE_RETRIES}), resuming in {delay}s...")
+                time.sleep(delay)
+                log_start = claude.resume("Continue where you left off.")
+                claude_result = claude.monitor(log_start)
+                if claude_result.timed_out:
+                    return None
+            if claude_result.exit_code != 0:
+                log(f"Crashed during wake (exit={claude_result.exit_code}), resuming...")
+                time.sleep(3)
+                log_start = claude.resume("You crashed and were resumed. Continue where you left off.")
+                claude_result = claude.monitor(log_start)
+            if claude_result.context_pct >= CONTEXT_THRESHOLD:
+                return claude_result
