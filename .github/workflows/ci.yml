@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-harness:
+    name: Harness tests (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install pytest
+      - name: Run harness tests
+        run: pytest harness/ -v
+
+  lint-python:
+    name: Python syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check syntax
+        run: python -m py_compile harness/session.py && python -m py_compile harness/config.py && python -m py_compile harness/relay.py && python -m py_compile harness/process.py && python -m py_compile harness/relay_utils.py && python -m py_compile harness/notify_format.py && python -m py_compile harness/jsonl_checks.py
+
+  lint-js:
+    name: JS syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check syntax (secrets)
+        run: node --check secrets/vault.mjs && node --check secrets/cli.mjs && node --check secrets/mcp-server.mjs
+      - name: Check syntax (slack)
+        run: node --check slack/mcp-server.mjs && node --check slack/slack-helpers.mjs
+
+  check-line-limits:
+    name: File line limit (200)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check files under 200 lines
+        run: |
+          status=0
+          for f in harness/*.py slack/*.mjs secrets/*.mjs notifications/*.py hub/src/routes/**/*.svelte; do
+            [ -f "$f" ] || continue
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 200 ]; then
+              echo "FAIL: $f has $lines lines (limit: 200)"
+              status=1
+            fi
+          done
+          exit $status

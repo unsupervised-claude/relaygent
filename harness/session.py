@@ -90,21 +90,12 @@ class SleepManager:
         except Exception:
             pass  # Best-effort
 
-    def _clear_slack_dedup(self) -> None:
-        """Clear Slack dedup keys so new messages always trigger wake.
-
-        Slack unreads can't be marked as read (missing write scopes),
-        so the same dedup keys persist and block real new messages.
-        Clearing on sleep entry ensures any change in unread state wakes us.
-        """
-        self._seen_timestamps = {
-            ts for ts in self._seen_timestamps
-            if not ts.startswith("slack-")
-        }
-
     def _wait_for_wake(self) -> tuple[bool, list]:
         """Poll cache file for wake condition. Returns (woken, notifications)."""
-        self._clear_slack_dedup()
+        # Note: Slack dedup keys use format slack-{channel_id}-{unread_count},
+        # so new messages naturally produce new keys (count changes).
+        # Don't clear Slack dedup keys here — causes infinite wake loop
+        # when channels have permanent phantom unreads (missing write scopes).
         set_status("sleeping")
         log("Sleeping, waiting for notifications...")
 
