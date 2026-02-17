@@ -71,7 +71,8 @@ def collect(notifications):
     last_ts = "0"
     try:
         if os.path.exists(_LAST_CHECK_FILE):
-            last_ts = open(_LAST_CHECK_FILE).read().strip() or "0"
+            with open(_LAST_CHECK_FILE) as f:
+                last_ts = f.read().strip() or "0"
     except OSError:
         pass
 

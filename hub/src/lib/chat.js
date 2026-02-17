@@ -14,7 +14,7 @@ let db;
 function getDb() {
 	if (db) return db;
 	fs.mkdirSync(DB_DIR, { recursive: true });
-	db = new Database(DB_PATH);
+	db = new Database(DB_PATH, { timeout: 5000 });
 	db.pragma('journal_mode = WAL');
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS messages (
