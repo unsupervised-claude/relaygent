@@ -39,7 +39,11 @@ try:
             parts.append('REMINDER DUE: \"' + n.get('message', '') + '\"')
         elif n.get('type') == 'message':
             count = n.get('count', 0)
-            parts.append(f'{count} unread chat message(s) — check with read_messages')
+            src = n.get('source', 'chat')
+            if src == 'slack':
+                parts.append(f'{count} unread Slack message(s)')
+            else:
+                parts.append(f'{count} unread chat message(s) — check with read_messages')
     if parts:
         print(' | '.join(parts))
 except: pass

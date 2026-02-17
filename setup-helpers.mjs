@@ -129,8 +129,12 @@ export function setupHooks(config, REPO_DIR, HOME, C) {
 		command: 'node',
 		args: [join(REPO_DIR, 'email', 'mcp-server.mjs')],
 	};
+	claudeConfig.mcpServers['slack'] = {
+		command: 'node',
+		args: [join(REPO_DIR, 'slack', 'mcp-server.mjs')],
+	};
 	writeFileSync(claudeJson, JSON.stringify(claudeConfig, null, 2));
-	console.log(`  MCP: hub-chat + notifications + computer-use + secrets + email registered`);
+	console.log(`  MCP: hub-chat + notifications + computer-use + secrets + email + slack registered`);
 }
 
 export function envFromConfig(config) {

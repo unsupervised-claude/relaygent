@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 HUB_HOST = os.environ.get("RELAYGENT_HUB_HOST", "127.0.0.1")
 HUB_PORT = os.environ.get("RELAYGENT_HUB_PORT", "8080")
+SLACK_TOKEN_PATH = os.path.join(
+    os.path.expanduser("~"), ".relaygent", "slack", "token.json"
+)
 
 
 @app.route("/notifications/pending", methods=["GET"])
@@ -118,6 +121,55 @@ def _collect_chat_messages(notifications):
             })
     except Exception:
         logger.warning("Failed to check hub chat for unread messages", exc_info=True)
+
+
+def _collect_slack_messages(notifications):
+    """Check Slack for unread DMs and mentions."""
+    if not os.path.exists(SLACK_TOKEN_PATH):
+        return
+    try:
+        with open(SLACK_TOKEN_PATH) as f:
+            token = json.loads(f.read()).get("access_token")
+    except (json.JSONDecodeError, OSError):
+        return
+    if not token:
+        return
+    data = json.dumps(
+        {"limit": 200, "types": "im,mpim", "exclude_archived": True}
+    ).encode()
+    req = urllib.request.Request(
+        "https://slack.com/api/conversations.list",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        result = json.loads(resp.read().decode())
+    if not result.get("ok"):
+        return
+    unread = [
+        c for c in (result.get("channels") or [])
+        if (c.get("unread_count_display") or 0) > 0
+    ]
+    if not unread:
+        return
+    total = sum(c.get("unread_count_display", 0) for c in unread)
+    channels = [
+        {"id": c["id"], "name": c.get("name", c["id"]),
+         "unread": c.get("unread_count_display", 0)}
+        for c in unread
+    ]
+    notifications.append({
+        "type": "message",
+        "source": "slack",
+        "count": total,
+        "channels": channels,
+    })
+
+
+_slow_collectors.append(_collect_slack_messages)
 
 
 @app.route("/health", methods=["GET"])
