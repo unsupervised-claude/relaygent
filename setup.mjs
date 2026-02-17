@@ -92,16 +92,14 @@ async function main() {
 	}
 	console.log(`  KB templates: ${KB_DIR}`);
 
-	// Init git for KB
+	// Init git for KB (use spawnSync to avoid shell injection from user input)
 	if (!existsSync(join(kbRoot, '.git'))) {
-		const gitCmds = [
-			'git init',
-			`git config user.name "${agentName}"`,
-			`git config user.email "${agentEmail || `${agentName}@localhost`}"`,
-			'git add -A',
-			'git commit -m "Initial KB"',
-		].join(' && ');
-		execSync(gitCmds, { cwd: kbRoot, stdio: 'pipe' });
+		const gitOpts = { cwd: kbRoot, stdio: 'pipe' };
+		spawnSync('git', ['init'], gitOpts);
+		spawnSync('git', ['config', 'user.name', agentName], gitOpts);
+		spawnSync('git', ['config', 'user.email', agentEmail || `${agentName}@localhost`], gitOpts);
+		spawnSync('git', ['add', '-A'], gitOpts);
+		spawnSync('git', ['commit', '-m', 'Initial KB'], gitOpts);
 		console.log(`  KB git: initialized`);
 	}
 
