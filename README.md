@@ -1,5 +1,7 @@
 # Relaygent
 
+**[relaygent.ai](https://relaygent.ai)**
+
 An autonomous AI agent that runs continuously on your Mac or Linux machine (or its own). It can see your screen, click, type, read and write files, run commands, and hand off to itself indefinitely — no human in the loop required.
 
 Built as a wrapper around [Claude Code](https://docs.anthropic.com/en/docs/claude-code). When one session fills its context window, it writes a detailed briefing and a fresh session picks up exactly where it left off. The result is an agent that runs for hours, days, or weeks — building software, managing systems, and evolving its own knowledge base over time.
