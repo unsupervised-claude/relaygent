@@ -1,95 +1,59 @@
 /**
- * Encrypted secrets vault — AES-256-GCM with PBKDF2 key derivation.
- * Stores secrets in ~/.relaygent/secrets.enc as encrypted JSON.
+ * Simple secrets store — JSON file with chmod 600 protection.
+ * Follows the same pattern as gh, aws, gcloud, docker credentials.
+ * No encryption, no master password — relies on OS file permissions.
  */
-import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from "crypto";
-import { readFileSync, writeFileSync, existsSync, renameSync } from "fs";
-import { join } from "path";
+import { readFileSync, writeFileSync, existsSync, renameSync, chmodSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 import { homedir } from "os";
 
-const VAULT_PATH = join(homedir(), ".relaygent", "secrets.enc");
-const ALGORITHM = "aes-256-gcm";
-const ITERATIONS = 100000;
-const KEY_LEN = 32;
-const SALT_LEN = 16;
-const IV_LEN = 12;
-const TAG_LEN = 16;
+const SECRETS_PATH = join(homedir(), ".relaygent", "secrets.json");
 
-function deriveKey(password, salt) {
-	return pbkdf2Sync(password, salt, ITERATIONS, KEY_LEN, "sha256");
+function ensureDir() {
+	mkdirSync(dirname(SECRETS_PATH), { recursive: true });
 }
 
-function encrypt(plaintext, password) {
-	const salt = randomBytes(SALT_LEN);
-	const iv = randomBytes(IV_LEN);
-	const key = deriveKey(password, salt);
-	const cipher = createCipheriv(ALGORITHM, key, iv);
-	const encrypted = Buffer.concat([cipher.update(plaintext, "utf-8"), cipher.final()]);
-	const tag = cipher.getAuthTag();
-	// Format: salt (16) + iv (12) + tag (16) + ciphertext
-	return Buffer.concat([salt, iv, tag, encrypted]);
-}
-
-function decrypt(data, password) {
-	const salt = data.subarray(0, SALT_LEN);
-	const iv = data.subarray(SALT_LEN, SALT_LEN + IV_LEN);
-	const tag = data.subarray(SALT_LEN + IV_LEN, SALT_LEN + IV_LEN + TAG_LEN);
-	const ciphertext = data.subarray(SALT_LEN + IV_LEN + TAG_LEN);
-	const key = deriveKey(password, salt);
-	const decipher = createDecipheriv(ALGORITHM, key, iv);
-	decipher.setAuthTag(tag);
-	return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf-8");
-}
-
-export function vaultExists() {
-	return existsSync(VAULT_PATH);
-}
-
-function atomicWrite(path, data) {
-	const tmp = path + ".tmp";
-	writeFileSync(tmp, data);
-	renameSync(tmp, path);
-}
-
-export function createVault(masterPassword) {
-	const secrets = {};
-	const data = encrypt(JSON.stringify(secrets), masterPassword);
-	atomicWrite(VAULT_PATH, data);
-}
-
-export function loadVault(masterPassword) {
-	if (!existsSync(VAULT_PATH)) throw new Error("Vault not found. Run setup first.");
-	const data = readFileSync(VAULT_PATH);
+function load() {
+	if (!existsSync(SECRETS_PATH)) return {};
 	try {
-		return JSON.parse(decrypt(data, masterPassword));
+		return JSON.parse(readFileSync(SECRETS_PATH, "utf-8"));
 	} catch {
-		throw new Error("Wrong master password or corrupted vault.");
+		return {};
 	}
 }
 
-function saveVault(secrets, masterPassword) {
-	const data = encrypt(JSON.stringify(secrets), masterPassword);
-	atomicWrite(VAULT_PATH, data);
+function save(secrets) {
+	ensureDir();
+	const tmp = SECRETS_PATH + ".tmp";
+	writeFileSync(tmp, JSON.stringify(secrets, null, 2), { mode: 0o600 });
+	renameSync(tmp, SECRETS_PATH);
+	chmodSync(SECRETS_PATH, 0o600);
 }
 
-export function getSecret(masterPassword, name) {
-	const secrets = loadVault(masterPassword);
-	return secrets[name] ?? null;
+export function vaultExists() {
+	return existsSync(SECRETS_PATH);
 }
 
-export function setSecret(masterPassword, name, value) {
-	const secrets = loadVault(masterPassword);
+export function createVault() {
+	if (!existsSync(SECRETS_PATH)) save({});
+}
+
+export function getSecret(name) {
+	return load()[name] ?? null;
+}
+
+export function setSecret(name, value) {
+	const secrets = load();
 	secrets[name] = value;
-	saveVault(secrets, masterPassword);
+	save(secrets);
 }
 
-export function listSecrets(masterPassword) {
-	const secrets = loadVault(masterPassword);
-	return Object.keys(secrets);
+export function listSecrets() {
+	return Object.keys(load());
 }
 
-export function deleteSecret(masterPassword, name) {
-	const secrets = loadVault(masterPassword);
+export function deleteSecret(name) {
+	const secrets = load();
 	delete secrets[name];
-	saveVault(secrets, masterPassword);
+	save(secrets);
 }

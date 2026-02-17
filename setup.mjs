@@ -47,13 +47,6 @@ async function main() {
 	const agentName = agentNameInput || 'relaygent';
 	const agentEmail = (await ask(`${C.cyan}Agent email (optional, for identity/services):${C.reset} `)).trim();
 
-	// Secrets vault — encrypted credential storage
-	const masterPassword = (await ask(`${C.cyan}Master password (encrypts stored credentials):${C.reset} `)).trim();
-	if (!masterPassword) {
-		console.log(`${C.red}Master password required for credential vault.${C.reset}`);
-		rl.close();
-		process.exit(1);
-	}
 	const emailPassword = agentEmail
 		? (await ask(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim()
 		: '';
@@ -144,8 +137,8 @@ async function main() {
 	execSync('npm run build', { cwd: join(REPO_DIR, 'hub'), stdio: 'pipe' });
 	console.log(`  Hub: ${C.green}built${C.reset}`);
 
-	// Create secrets vault and store credentials
-	await setupSecrets(REPO_DIR, masterPassword, emailPassword, C);
+	// Create secrets file and store credentials
+	await setupSecrets(REPO_DIR, emailPassword, C);
 
 	// Set up Hammerspoon (computer-use)
 	await setupHammerspoon(config, REPO_DIR, HOME, C, ask);

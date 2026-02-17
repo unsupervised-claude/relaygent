@@ -86,12 +86,6 @@ check_process() {
 
 do_start() {
     load_config
-    # Secrets vault — master password needed for MCP servers
-    if [ -f "$HOME/.relaygent/secrets.enc" ] && [ -z "${RELAYGENT_MASTER_PASSWORD:-}" ]; then
-        echo -ne "${CYAN}Master password:${NC} "
-        read -rs RELAYGENT_MASTER_PASSWORD; echo
-        export RELAYGENT_MASTER_PASSWORD
-    fi
     echo -e "${CYAN}Starting Relaygent...${NC}"
     local port_ok=true
     check_port "$HUB_PORT" "Hub" || port_ok=false
