@@ -31,10 +31,12 @@ while true; do
     # Fast poll — DB reminders + hub chat only
     FAST_RESULT=$(curl -sf --max-time 3 "${NOTIFY_API}?fast=1" 2>/dev/null)
     # Merge: fast results + cached slow results (deduped by source)
-    RESULT=$(python3 -c "
-import json,sys
-fast = json.loads('''${FAST_RESULT:-[]}''')
-try: slow = json.load(open('$SLOW_CACHE'))
+    # Pass data via env vars — shell interpolation into Python strings breaks on
+    # backslashes, triple quotes, or empty results
+    RESULT=$(FAST_JSON="${FAST_RESULT:-[]}" SLOW_FILE="$SLOW_CACHE" python3 -c "
+import json,os
+fast = json.loads(os.environ.get('FAST_JSON','[]'))
+try: slow = json.load(open(os.environ['SLOW_FILE']))
 except: slow = []
 sources = {n.get('source','') for n in fast if n.get('type')=='message'}
 merged = fast + [n for n in slow if n.get('type')=='message' and n.get('source','') not in sources]
