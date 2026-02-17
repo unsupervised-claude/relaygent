@@ -42,9 +42,7 @@ jobs:
       - name: Check syntax (secrets)
         run: node --check secrets/vault.mjs && node --check secrets/cli.mjs && node --check secrets/mcp-server.mjs
       - name: Check syntax (slack)
-        run: |
-          cd slack && npm ci
-          node --check mcp-server.mjs && node --check slack-helpers.mjs
+        run: node --check slack/mcp-server.mjs && node --check slack/slack-helpers.mjs
 
   check-line-limits:
     name: File line limit (200)
