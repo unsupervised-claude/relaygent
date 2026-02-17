@@ -66,7 +66,7 @@ if [[ -n "$REPO_PATH" ]]; then
 fi
 if [[ -n "$LATEST_JSONL" ]]; then
     FILL_PCT=$(tail -c 65536 "$LATEST_JSONL" 2>/dev/null | python3 -c "
-import sys, json
+import sys, json, os
 data = sys.stdin.buffer.read().decode('utf-8', errors='ignore')
 for line in reversed(data.strip().split(chr(10))):
     try:
@@ -75,7 +75,8 @@ for line in reversed(data.strip().split(chr(10))):
             usage = entry.get('message', {}).get('usage', {})
             if usage:
                 total = usage.get('input_tokens', 0) + usage.get('output_tokens', 0) + usage.get('cache_creation_input_tokens', 0) + usage.get('cache_read_input_tokens', 0)
-                print(int(total / 200000 * 100))
+                ctx_window = int(os.environ.get('RELAYGENT_CONTEXT_WINDOW', '200000'))
+                print(int(total / ctx_window * 100))
                 break
     except: continue
 " 2>/dev/null)
