@@ -6,8 +6,9 @@
 # Usage: notification-poller &
 
 NOTIFICATIONS_PORT="${RELAYGENT_NOTIFICATIONS_PORT:-$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/.relaygent/config.json')))['services']['notifications']['port'])" 2>/dev/null || echo 8083)}"
+NOTIFICATIONS_HOST="${RELAYGENT_NOTIFICATIONS_HOST:-$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/.relaygent/config.json')))['services']['notifications'].get('host','localhost'))" 2>/dev/null || echo localhost)}"
 CACHE_FILE="/tmp/relaygent-notifications-cache.json"
-NOTIFY_API="http://localhost:${NOTIFICATIONS_PORT}/notifications/pending"
+NOTIFY_API="http://${NOTIFICATIONS_HOST}:${NOTIFICATIONS_PORT}/notifications/pending"
 POLL_INTERVAL=1
 SLOW_POLL_EVERY=10  # Full poll (including Slack, email) every N seconds
 slow_counter=0
