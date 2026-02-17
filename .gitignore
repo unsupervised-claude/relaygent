@@ -12,3 +12,16 @@ harness/settings.json
 knowledge/
 data/
 logs/
+
+# Secrets and credentials
+.env
+.env.*
+*.key
+*.pem
+credentials.json
+secrets.json
+
+# SQLite temp files
+*.db-shm
+*.db-wal
+*.db-journal
