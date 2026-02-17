@@ -106,6 +106,11 @@ start_services() {
         > "$REPO_DIR/logs/relaygent-notifications.log" 2>&1 &
     echo -e "  Notifications (port $NOTIF_PORT): ${GREEN}started${NC}"
 
+    # Notification poller (caches notifications for check-notifications hook)
+    "$REPO_DIR/hooks/notification-poller" \
+        > "$REPO_DIR/logs/relaygent-notification-poller.log" 2>&1 &
+    echo -e "  Notification poller: ${GREEN}started${NC}"
+
     sleep 1
 }
 
