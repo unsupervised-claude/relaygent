@@ -1,5 +1,4 @@
 """Claude subprocess management with hang detection."""
-
 from __future__ import annotations
 
 import subprocess
@@ -116,6 +115,7 @@ class ClaudeProcess:
 
     def resume(self, message: str) -> int:
         self._terminate()
+        self._context_warning_sent = False
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
         settings_file = str(Path(__file__).parent / "settings.json")
