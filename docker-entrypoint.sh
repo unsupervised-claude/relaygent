@@ -11,6 +11,9 @@ FORUM_PORT="${RELAYGENT_FORUM_PORT:-8085}"
 NOTIF_PORT="${RELAYGENT_NOTIFICATIONS_PORT:-8083}"
 CU_PORT="${HAMMERSPOON_PORT:-8097}"
 
+# In Docker, services must bind to 0.0.0.0 to be reachable from outside
+export RELAYGENT_BIND_HOST="${RELAYGENT_BIND_HOST:-0.0.0.0}"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 write_config() {
@@ -138,7 +141,7 @@ case "${1:-start}" in
     shell) exec /bin/bash ;;
     hub-only)
         write_config
-        PORT="$HUB_PORT" exec node "$REPO_DIR/hub/server.js"
+        PORT="$HUB_PORT" HOST="0.0.0.0" exec node "$REPO_DIR/hub/server.js"
         ;;
     *) echo "Usage: docker run relaygent [start|shell|hub-only]"; exit 1 ;;
 esac
