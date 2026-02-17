@@ -45,7 +45,9 @@ check_service "Notifications" "http://127.0.0.1:${NOTIF_PORT}/health"
 check_service "Forum" "http://127.0.0.1:${FORUM_PORT}/health"
 check_service "Hub" "http://127.0.0.1:${HUB_PORT}/api/health"
 HS_PORT=$(python3 -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('services',{}).get('hammerspoon',{}).get('port',8097))" 2>/dev/null || echo 8097)
-check_service "Hammerspoon" "http://127.0.0.1:${HS_PORT}/health"
+CU_NAME="Hammerspoon"
+[ "$(uname)" = "Linux" ] && CU_NAME="Computer-use"
+check_service "$CU_NAME" "http://127.0.0.1:${HS_PORT}/health"
 
 # Unread chat messages
 UNREAD=$(curl -s --max-time 2 "http://127.0.0.1:${HUB_PORT}/api/chat?mode=unread" 2>/dev/null)
@@ -71,6 +73,34 @@ if [ -d "$KB_DIR" ]; then
     echo -e "\033[0;34mKnowledge:\033[0m $TOPIC_COUNT topics"
 fi
 
+# Due tasks
+TASKS_FILE="$KB_DIR/tasks.md"
+if [ -f "$TASKS_FILE" ]; then
+    DUE_TASKS=$(python3 -c "
+import re, sys
+from datetime import datetime, timedelta
+now = datetime.now()
+freqs = {'6h': 0.25, '12h': 0.5, 'daily': 1, '2d': 2, '3d': 3, 'weekly': 7, 'monthly': 30}
+due = []
+for line in open('$TASKS_FILE'):
+    m = re.match(r'- \[ \] (.+?) \| type: (\w+) \| freq: (\w+) \| last: (.+)', line.strip())
+    if not m: continue
+    desc, ttype, freq, last = m.groups()
+    try:
+        last_dt = datetime.strptime(last.strip(), '%Y-%m-%d %H:%M')
+        days = freqs.get(freq, 1)
+        if now - last_dt >= timedelta(days=days):
+            due.append(desc.strip())
+    except: pass
+if due:
+    print('\n\033[1;33mTasks due:\033[0m')
+    for d in due[:5]: print(f'  • {d}')
+else:
+    print('\n\033[0;34mTasks:\033[0m nothing due')
+" 2>/dev/null)
+    [ -n "$DUE_TASKS" ] && echo "$DUE_TASKS"
+fi
+
 # Handoff
 if [ -f "$HANDOFF_FILE" ]; then
     HANDOFF_LINES=$(wc -l < "$HANDOFF_FILE" | tr -d ' ')
@@ -85,6 +115,23 @@ if [ -f "$HANDOFF_FILE" ]; then
         done
         echo -e "\033[1;33m└─────────────────────────────────────────────────────┘\033[0m"
     fi
+fi
+
+# Recent forum posts (last 24h)
+FORUM_POSTS=$(curl -s --max-time 2 "http://127.0.0.1:${FORUM_PORT}/posts?limit=3&sort=recent" 2>/dev/null)
+if [ -n "$FORUM_POSTS" ]; then
+    FORUM_DISPLAY=$(echo "$FORUM_POSTS" | python3 -c "
+import sys, json
+try:
+    posts = json.load(sys.stdin)
+    if posts:
+        print('\n\033[1;33mRecent forum posts:\033[0m')
+        for p in posts[:3]:
+            ccount = p.get('comment_count', 0)
+            print(f'  [{p[\"id\"]}] {p[\"title\"]} ({ccount} comments)')
+except: pass
+" 2>/dev/null)
+    [ -n "$FORUM_DISPLAY" ] && echo "$FORUM_DISPLAY"
 fi
 
 echo ""
