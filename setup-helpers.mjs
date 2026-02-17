@@ -144,3 +144,26 @@ export function envFromConfig(config) {
 		RELAYGENT_KB_DIR: config.paths.kb,
 	};
 }
+
+export function askSecret(q) {
+	return new Promise(r => {
+		process.stdout.write(q);
+		const stdin = process.stdin;
+		const wasRaw = stdin.isRaw;
+		if (stdin.isTTY) stdin.setRawMode(true);
+		let buf = '';
+		const onData = (ch) => {
+			const c = ch.toString();
+			if (c === '\n' || c === '\r') {
+				stdin.removeListener('data', onData);
+				if (stdin.isTTY) stdin.setRawMode(wasRaw);
+				process.stdout.write('\n');
+				r(buf);
+			} else if (c === '\x7f' || c === '\b') {
+				if (buf.length) { buf = buf.slice(0, -1); process.stdout.write('\b \b'); }
+			} else if (c === '\x03') { process.exit(1); }
+			else { buf += c; process.stdout.write('*'); }
+		};
+		stdin.on('data', onData);
+	});
+}

@@ -8,7 +8,7 @@ import { execSync, spawnSync } from 'child_process';
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync, chmodSync, appendFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
-import { setupHammerspoon, setupHooks, setupSecrets, envFromConfig } from './setup-helpers.mjs';
+import { setupHammerspoon, setupHooks, setupSecrets, envFromConfig, askSecret } from './setup-helpers.mjs';
 
 const REPO_DIR = process.argv[2] || resolve('.');
 const HOME = homedir();
@@ -48,14 +48,14 @@ async function main() {
 	const agentEmail = (await ask(`${C.cyan}Agent email (optional, for identity/services):${C.reset} `)).trim();
 
 	// Secrets vault — encrypted credential storage
-	const masterPassword = (await ask(`${C.cyan}Master password (encrypts stored credentials):${C.reset} `)).trim();
+	const masterPassword = (await askSecret(`${C.cyan}Master password (encrypts stored credentials):${C.reset} `)).trim();
 	if (!masterPassword) {
 		console.log(`${C.red}Master password required for credential vault.${C.reset}`);
 		rl.close();
 		process.exit(1);
 	}
 	const emailPassword = agentEmail
-		? (await ask(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim()
+		? (await askSecret(`${C.cyan}Email password (for ${agentEmail}):${C.reset} `)).trim()
 		: '';
 
 	const hubPort = 8080;
@@ -185,7 +185,7 @@ async function main() {
 	if (launch !== 'n') {
 		console.log(`\nStarting Relaygent...\n`);
 		spawnSync(join(REPO_DIR, 'bin', 'relaygent'), ['start'],
-			{ stdio: 'inherit', env: { ...process.env, ...envFromConfig(config) } });
+			{ stdio: 'inherit', env: { ...process.env, ...envFromConfig(config), RELAYGENT_MASTER_PASSWORD: masterPassword } });
 	}
 
 	rl.close();
