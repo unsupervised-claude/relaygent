@@ -1,5 +1,6 @@
 // Android DNS patch: override getaddrinfo with Node's resolve4
 // Required because Android SSH sessions can't use system resolver
+// .cjs extension ensures CommonJS context for --require flag
 const dns = require('dns');
 const net = require('net');
 const origLookup = dns.lookup.bind(dns);

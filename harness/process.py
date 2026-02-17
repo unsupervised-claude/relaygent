@@ -100,7 +100,7 @@ class ClaudeProcess:
         path = env.get("PATH", "")
         if tbin not in path:
             env["PATH"] = tbin + (":" + path if path else "")
-        patch = Path(__file__).parent.parent / "computer-use" / "dns-patch.js"
+        patch = Path(__file__).parent.parent / "computer-use" / "dns-patch.cjs"
         if patch.exists():
             flag = f"--require {patch}"
             existing = env.get("NODE_OPTIONS", "")
