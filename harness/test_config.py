@@ -31,6 +31,23 @@ class TestTimer:
         assert t.has_successor_time() is True
 
 
+class TestContextWindow:
+    def test_default_value(self):
+        from config import CONTEXT_WINDOW
+        assert CONTEXT_WINDOW == 200000
+
+    def test_env_override(self, monkeypatch):
+        monkeypatch.setenv("RELAYGENT_CONTEXT_WINDOW", "128000")
+        # Re-import to pick up env var
+        import importlib
+        import config
+        importlib.reload(config)
+        assert config.CONTEXT_WINDOW == 128000
+        # Restore
+        monkeypatch.delenv("RELAYGENT_CONTEXT_WINDOW")
+        importlib.reload(config)
+
+
 class TestGetWorkspaceDir:
     def test_creates_directory(self, tmp_path, monkeypatch):
         monkeypatch.setattr("config.RUNS_DIR", tmp_path / "runs")

@@ -13,7 +13,7 @@ SILENCE_TIMEOUT = 300           # Seconds of no output before considering hung
 MAX_RETRIES = 2                 # 3 total attempts
 CONTEXT_THRESHOLD = 85          # % context fill to trigger wrap-up warning
 MIN_SUCCESSOR_TIME = 10 * 60    # Don't spawn successor with <10 min remaining
-CONTEXT_WINDOW = 200000         # Opus 4.6 context window size
+CONTEXT_WINDOW = int(os.environ.get("RELAYGENT_CONTEXT_WINDOW", "200000"))
 
 # Log settings
 LOG_MAX_SIZE = 512000           # 500KB
