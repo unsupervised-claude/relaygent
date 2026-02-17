@@ -33,8 +33,20 @@ def log(msg: str) -> None:
     print(f"[{timestamp}] {msg}", flush=True)
 
 
+STATUS_FILE = REPO_DIR / "data" / "relay-status.json"
+
+
 def set_status(status: str) -> None:
-    """Set agent activity status. Override for custom integrations."""
+    """Write agent status to a JSON file for dashboard/monitoring."""
+    import json
+    try:
+        STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"status": status, "updated": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        tmp = STATUS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload))
+        tmp.rename(STATUS_FILE)
+    except OSError:
+        pass  # Best-effort — don't crash the relay over status updates
 
 
 def get_workspace_dir() -> Path:
