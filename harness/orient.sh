@@ -107,7 +107,7 @@ if [ -f "$HANDOFF_FILE" ]; then
     HANDOFF_MODIFIED=$(stat -f "%Sm" -t "%H:%M" "$HANDOFF_FILE" 2>/dev/null || stat -c "%y" "$HANDOFF_FILE" 2>/dev/null | cut -d' ' -f2 | cut -d: -f1-2)
     echo -e "\n\033[0;34mHandoff:\033[0m $HANDOFF_LINES lines, last updated $HANDOFF_MODIFIED"
     # Show main goal
-    GOAL=$(sed -n '/## MAIN GOAL/,/^##[^#]/p' "$HANDOFF_FILE" | head -5)
+    GOAL=$(sed -n '/^#\{1,2\} MAIN GOAL/,/^#\{1,2\} [^M]/p' "$HANDOFF_FILE" | head -5)
     if [ -n "$GOAL" ]; then
         echo -e "\033[1;33m┌─ MAIN GOAL ─────────────────────────────────────────┐\033[0m"
         echo "$GOAL" | while IFS= read -r line; do
