@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+.test-venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+.svelte-kit/
+build/
+knowledge/
+data/
+logs/
+*.pid
+.git/
+.DS_Store
+harness/runs/
+harness/settings.json
