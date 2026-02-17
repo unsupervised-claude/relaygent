@@ -5,9 +5,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFileSync } from "node:fs";
 import { platform } from "node:os";
-import { hsCall, takeScreenshot, runOsascript, findElements, clickElement, checkHealth, SCREENSHOT_PATH } from "./hammerspoon.mjs";
+import { hsCall, takeScreenshot, readScreenshot, runOsascript, findElements, clickElement, checkHealth, SCREENSHOT_PATH } from "./hammerspoon.mjs";
 const IS_LINUX = platform() === "linux";
 
 const server = new McpServer({ name: "computer-use", version: "1.0.0" });
@@ -27,10 +26,10 @@ server.tool("screenshot", "Capture screenshot. Use find_elements for precise coo
 		const r = await hsCall("POST", "/screenshot", body);
 		if (r.error) return { content: [{ type: "text", text: JSON.stringify(r) }] };
 		try {
-			const img = readFileSync(SCREENSHOT_PATH).toString("base64");
+			const img = readScreenshot();
 			return { content: [
 				{ type: "image", data: img, mimeType: "image/png" },
-				{ type: "text", text: `Screenshot: ${r.width}x${r.height}px` },
+				{ type: "text", text: `Screenshot: ${r.width}x${r.height}px (use these coords for clicks)` },
 			] };
 		} catch { return { content: [{ type: "text", text: JSON.stringify(r) }] }; }
 	}

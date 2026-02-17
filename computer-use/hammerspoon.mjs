@@ -1,8 +1,8 @@
 // HTTP client for computer-use backend (Hammerspoon on macOS, linux-server.py on Linux)
 // All requests serialized through single TCP connection
 
-import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import { platform } from "node:os";
 import http from "node:http";
 
@@ -12,6 +12,26 @@ const agent = new http.Agent({ keepAlive: false, maxSockets: 1 });
 let tail = Promise.resolve();
 
 const SCREENSHOT_PATH = "/tmp/claude-screenshot.png";
+const SCALED_PATH = "/tmp/claude-screenshot-scaled.png";
+const MAX_BYTES = 5 * 1024 * 1024; // 5MB — well under Claude's 20MB base64 limit
+const MAX_DIM = 1280; // max width/height when downscaling
+
+/** Read screenshot, downscaling if it exceeds MAX_BYTES. Returns base64 string. */
+export function readScreenshot() {
+	try {
+		const size = statSync(SCREENSHOT_PATH).size;
+		if (size <= MAX_BYTES) return readFileSync(SCREENSHOT_PATH).toString("base64");
+		// Downscale using sips (macOS) or convert (Linux/ImageMagick)
+		if (IS_LINUX) {
+			execFileSync("convert", [SCREENSHOT_PATH, "-resize", `${MAX_DIM}x${MAX_DIM}>`, SCALED_PATH], { timeout: 5000 });
+		} else {
+			execFileSync("sips", ["-Z", String(MAX_DIM), "--out", SCALED_PATH, SCREENSHOT_PATH], { timeout: 5000 });
+		}
+		return readFileSync(SCALED_PATH).toString("base64");
+	} catch {
+		return readFileSync(SCREENSHOT_PATH).toString("base64");
+	}
+}
 
 function hsCallOnce(method, path, body, timeoutMs) {
 	return new Promise(resolve => {
@@ -68,10 +88,10 @@ export async function takeScreenshot(delayMs = 300, indicator) {
 	const r = await hsCall("POST", "/screenshot", body);
 	if (r.error) return [{ type: "text", text: `(screenshot failed: ${r.error})` }];
 	try {
-		const img = readFileSync(SCREENSHOT_PATH).toString("base64");
+		const img = readScreenshot();
 		return [
 			{ type: "image", data: img, mimeType: "image/png" },
-			{ type: "text", text: `Screenshot: ${r.width}x${r.height}px` },
+			{ type: "text", text: `Screenshot: ${r.width}x${r.height}px (use these coords for clicks)` },
 		];
 	} catch { return []; }
 }
