@@ -19,7 +19,14 @@ HUB_PORT = os.environ.get("RELAYGENT_HUB_PORT", "8080")
 
 @app.route("/notifications/pending", methods=["GET"])
 def get_notifications():
-    """Unified endpoint: return all pending notifications."""
+    """Unified endpoint: return all pending notifications.
+
+    Query params:
+        fast=1 — only check fast local sources (DB reminders + hub chat).
+                 Skips slow external APIs (Slack, email). Used by the
+                 notification-poller daemon which polls every 1s.
+    """
+    fast_mode = request.args.get("fast") == "1"
     notifications = []
     try:
         _collect_due_reminders(notifications)
@@ -29,7 +36,18 @@ def get_notifications():
         _collect_chat_messages(notifications)
     except Exception:
         logger.exception("Failed to collect chat messages")
+    if not fast_mode:
+        for collector in _slow_collectors:
+            try:
+                collector(notifications)
+            except Exception:
+                logger.exception(f"Failed in {collector.__name__}")
     return jsonify(notifications)
+
+
+# Slow collectors — external API calls, skipped in fast mode.
+# Append functions here (e.g., Slack, email) as integrations are added.
+_slow_collectors = []
 
 
 def _collect_due_reminders(notifications):
