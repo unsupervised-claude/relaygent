@@ -72,7 +72,9 @@ function parseSessionLine(line) {
 				}
 			}
 		}
-	} catch { /* ignore */ }
+	} catch (e) {
+		if (!(e instanceof SyntaxError)) console.error('parseSessionLine error:', e.message);
+	}
 	return [];
 }
 
@@ -114,7 +116,7 @@ function startWatching() {
 				const pct = parseInt(fs.readFileSync('/tmp/relaygent-context-pct', 'utf-8').trim(), 10);
 				if (!isNaN(pct)) broadcastRelay({ type: 'context', pct });
 			} catch { /* no context file */ }
-		} catch { /* ignore */ }
+		} catch (e) { console.error('Session file watcher error:', e.message); }
 	});
 	console.log(`Watching: ${sessionFile}`);
 }
@@ -142,7 +144,9 @@ function startChatWatcher() {
 			if (!raw || raw === '{}') return;
 			const msg = JSON.parse(raw);
 			if (msg.id) broadcastChat({ type: 'message', data: msg });
-		} catch { /* ignore */ }
+		} catch (e) {
+			if (!(e instanceof SyntaxError)) console.error('Chat watcher error:', e.message);
+		}
 	});
 }
 
