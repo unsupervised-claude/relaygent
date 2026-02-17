@@ -4,16 +4,16 @@ import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
-export async function setupSecrets(REPO_DIR, masterPassword, emailPassword, C) {
+export async function setupSecrets(REPO_DIR, emailPassword, C) {
 	const { createVault, vaultExists, setSecret } = await import(pathToFileURL(join(REPO_DIR, 'secrets', 'vault.mjs')).href);
 	if (!vaultExists()) {
-		createVault(masterPassword);
-		console.log(`  Secrets vault: ${C.green}created${C.reset}`);
+		createVault();
+		console.log(`  Secrets: ${C.green}created${C.reset} (~/.relaygent/secrets.json)`);
 	} else {
-		console.log(`  Secrets vault: ${C.green}exists${C.reset}`);
+		console.log(`  Secrets: ${C.green}exists${C.reset}`);
 	}
 	if (emailPassword) {
-		setSecret(masterPassword, 'email-password', emailPassword);
+		setSecret('email-password', emailPassword);
 		console.log(`  Secret stored: ${C.green}email-password${C.reset}`);
 	}
 }
