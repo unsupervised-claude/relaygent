@@ -98,10 +98,11 @@
 			if (msg.data.role === 'assistant') {
 				const wasHidden = !open || !autoScroll;
 				if (!open) open = true;
-				tabUnread++;
-				updateTabTitle();
-				if (wasHidden) playChime();
-			}
+				if (wasHidden) {
+					tabUnread++;
+					updateTabTitle();
+					playChime();
+				}
 			await tick();
 			if (autoScroll || msg.data.role === 'assistant') scrollBottom();
 		};
