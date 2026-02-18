@@ -8,22 +8,28 @@ import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick } from "./cdp.mjs";
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
 
+const visibleEl = (sel) =>
+  `(Array.from(document.querySelectorAll(${JSON.stringify(sel)})).find(e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0)||document.querySelector(${JSON.stringify(sel)}))`;
+
 const COORD_EXPR = (sel) =>
-  `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
+  `(function(){var el=${visibleEl(sel)};` +
   `if(!el)return null;var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
 
 const CLICK_EXPR = (sel) =>
-  `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
+  `(function(){var el=${visibleEl(sel)};` +
   `if(!el)return null;el.click();var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
 
+const norm = (s) => s.toLowerCase().replace(/[\u2018\u2019\u201a\u201b]/g,"'").replace(/[\u201c\u201d\u201e\u201f]/g,'"').replace(/\u00a0/g," ");
+
 const TEXT_COORD_EXPR = (text, idx) =>
-  `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
+  `(function(){var norm=function(s){return s.toLowerCase().replace(/[\\u2018\\u2019\\u201a\\u201b]/g,"'").replace(/[\\u201c\\u201d\\u201e\\u201f]/g,'"').replace(/\\u00a0/g," ")};` +
+  `var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
-  `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
+  `var matches=els.filter(e=>e.offsetParent!==null&&norm(e.innerText||e.value||'').includes(t));` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
@@ -31,9 +37,10 @@ const TEXT_COORD_EXPR = (text, idx) =>
   `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
 
 const TEXT_CLICK_EXPR = (text, idx) =>
-  `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
+  `(function(){var norm=function(s){return s.toLowerCase().replace(/[\\u2018\\u2019\\u201a\\u201b]/g,"'").replace(/[\\u201c\\u201d\\u201e\\u201f]/g,'"').replace(/\\u00a0/g," ")};` +
+  `var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
-  `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
+  `var matches=els.filter(e=>e.offsetParent!==null&&norm(e.innerText||e.value||'').includes(t));` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `el.click();var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
