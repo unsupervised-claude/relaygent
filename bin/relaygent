@@ -16,14 +16,14 @@ load_config() {
 import json,shlex,sys
 try:
  c=json.load(open('$CONFIG_FILE'));s=c['services']
- for k,v in[('HUB_PORT',c['hub']['port']),('FORUM_PORT',s['forum']['port']),
+ for k,v in[('HUB_PORT',c['hub']['port']),
   ('NOTIF_PORT',s['notifications']['port']),('HS_PORT',s.get('hammerspoon',{}).get('port',8097)),
   ('DATA_DIR',c['paths']['data']),('KB_DIR',c['paths']['kb'])]:print(f'{k}={shlex.quote(str(v))}')
 except Exception: sys.exit(1)
 ")" || { echo -e "${RED}Failed to parse $CONFIG_FILE. Re-run ./setup.sh${NC}"; exit 1; }
     eval "$config_vars"
     export RELAYGENT_DATA_DIR="$DATA_DIR" RELAYGENT_KB_DIR="$KB_DIR" RELAYGENT_HUB_PORT="$HUB_PORT"
-    export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_FORUM_PORT="$FORUM_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
+    export HAMMERSPOON_PORT="$HS_PORT" RELAYGENT_NOTIFICATIONS_PORT="$NOTIF_PORT"
 }
 
 port_pids() { # port_pids <port> → prints PIDs listening on port
@@ -89,7 +89,6 @@ do_start() {
     echo -e "${CYAN}Starting Relaygent...${NC}"
     local port_ok=true
     check_port "$HUB_PORT" "Hub" || port_ok=false
-    check_port "$FORUM_PORT" "Forum" || port_ok=false
     check_port "$NOTIF_PORT" "Notifications" || port_ok=false
     if [ "$port_ok" = false ]; then
         echo -e "\n  ${RED}Fix port conflicts above, then try again.${NC}"; exit 1
@@ -135,10 +134,6 @@ do_start() {
     # Hub — build if needed
     [ ! -d "$SCRIPT_DIR/hub/build" ] && echo "  Building hub..." && (cd "$SCRIPT_DIR/hub" && npm run build >/dev/null 2>&1)
     start_service "Hub (port $HUB_PORT)" "hub" env PORT="$HUB_PORT" node "$SCRIPT_DIR/hub/server.js"
-    # Forum
-    ensure_venv "$SCRIPT_DIR/forum"
-    start_service "Forum (port $FORUM_PORT)" "forum" \
-        "$SCRIPT_DIR/forum/.venv/bin/python3" "$SCRIPT_DIR/forum/server.py"
     # Notifications
     ensure_venv "$SCRIPT_DIR/notifications"
     start_service "Notifications (port $NOTIF_PORT)" "notifications" \
@@ -159,10 +154,10 @@ do_stop() {
     stop_process "Relay" "relay"
     local claude_pids; claude_pids=$(pgrep -f "claude.*--print.*--session-id" 2>/dev/null) || true
     [ -n "$claude_pids" ] && kill -TERM $claude_pids 2>/dev/null && echo -e "  Claude: ${YELLOW}cleaned up${NC}" || true
-    for svc in Computer-use:computer-use Hub:hub Forum:forum Notifications:notifications; do
+    for svc in Computer-use:computer-use Hub:hub Notifications:notifications; do
         stop_process "${svc%%:*}" "${svc##*:}"
     done
-    for pn in "${HUB_PORT:-8080}:Hub" "${FORUM_PORT:-8085}:Forum" "${NOTIF_PORT:-8083}:Notifications"; do
+    for pn in "${HUB_PORT:-8080}:Hub" "${NOTIF_PORT:-8083}:Notifications"; do
         local pids; pids=$(port_pids "${pn%%:*}") || true
         [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  ${pn##*:} orphan: ${YELLOW}killed${NC}" || true
     done
@@ -174,7 +169,7 @@ do_stop() {
 do_status() {
     load_config
     echo -e "${CYAN}Relaygent Status${NC}"
-    for svc in Relay:relay Hub:hub Forum:forum Notifications:notifications; do
+    for svc in Relay:relay Hub:hub Notifications:notifications; do
         check_process "${svc%%:*}" "${svc##*:}"
     done
     if [ "$(uname)" = "Darwin" ]; then
