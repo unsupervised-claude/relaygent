@@ -4,6 +4,8 @@
   "type": "module",
   "main": "mcp-server.mjs",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@slack/socket-mode": "^2.0.5",
+    "@slack/web-api": "^7.14.1"
   }
 }

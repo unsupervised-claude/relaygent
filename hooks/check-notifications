@@ -24,6 +24,25 @@ if ! pgrep -f "relaygent.*notification-poller" &>/dev/null; then
     fi
 fi
 
+# Ensure slack-socket-listener is running (Socket Mode for real-time Slack)
+SOCKET_SCRIPT="$(cd "$(dirname "$0")/../notifications" && pwd)/slack-socket-listener.mjs"
+SOCKET_CRASH_FILE="/tmp/relaygent-socket-last-start"
+if ! pgrep -f "slack-socket-listener" &>/dev/null; then
+    if [[ -f "$SOCKET_SCRIPT" ]]; then
+        sock_ok=true
+        if [[ -f "$SOCKET_CRASH_FILE" ]]; then
+            sock_last=$(cat "$SOCKET_CRASH_FILE" 2>/dev/null || echo 0)
+            sock_now=$(date +%s)
+            (( sock_now - sock_last < 30 )) && sock_ok=false
+        fi
+        if [[ "$sock_ok" = true ]]; then
+            date +%s > "$SOCKET_CRASH_FILE"
+            nohup node "$SOCKET_SCRIPT" >> /tmp/relaygent-socket-listener.log 2>&1 &
+            disown
+        fi
+    fi
+fi
+
 # Build context string: always include time
 TIME=$(date '+%H:%M:%S %Z')
 CTX="Current time: $TIME"

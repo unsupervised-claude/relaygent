@@ -12,6 +12,8 @@ POLL_INTERVAL=1
 SLOW_POLL_EVERY=10  # Full poll (including Slack, email) every N seconds
 slow_counter=0
 SLOW_CACHE="/tmp/relaygent-slow-cache.json"
+SOCKET_CACHE="/tmp/relaygent-slack-socket-cache.json"
+LAST_ACK="$HOME/.relaygent/slack/.last_check_ts"
 
 # Write empty caches on start
 echo '[]' > "$CACHE_FILE"
@@ -30,16 +32,33 @@ while true; do
     fi
     # Fast poll — DB reminders + hub chat only
     FAST_RESULT=$(curl -sf --max-time 3 "${NOTIFY_API}?fast=1" 2>/dev/null)
-    # Merge: fast results + cached slow results (deduped by source)
-    # Pass data via env vars — shell interpolation into Python strings breaks on
-    # backslashes, triple quotes, or empty results
-    RESULT=$(FAST_JSON="${FAST_RESULT:-[]}" SLOW_FILE="$SLOW_CACHE" python3 -c "
+    # Merge: fast results + socket cache + cached slow results (deduped by source)
+    RESULT=$(FAST_JSON="${FAST_RESULT:-[]}" SLOW_FILE="$SLOW_CACHE" SOCK_FILE="$SOCKET_CACHE" ACK_FILE="$LAST_ACK" python3 -c "
 import json,os
 fast = json.loads(os.environ.get('FAST_JSON','[]'))
 try: slow = json.load(open(os.environ['SLOW_FILE']))
 except: slow = []
+# Read Socket Mode cache — real-time Slack messages
+sock_notifs = []
+try:
+    ack_ts = float(open(os.environ['ACK_FILE']).read().strip() or '0')
+except: ack_ts = 0
+try:
+    sock = json.load(open(os.environ['SOCK_FILE']))
+    msgs = [m for m in sock.get('messages',[]) if float(m.get('ts','0')) > ack_ts]
+    if msgs:
+        by_ch = {}
+        for m in msgs:
+            ch = m.get('channel','')
+            by_ch.setdefault(ch, {'id':ch,'name':m.get('channel_name',ch),'unread':0,'messages':[]})
+            by_ch[ch]['unread'] += 1
+            by_ch[ch]['messages'].append({'user':m.get('user',''),'text':m.get('text',''),'ts':m.get('ts','')})
+        sock_notifs = [{'type':'message','source':'slack','count':len(msgs),'channels':list(by_ch.values())}]
+except: pass
 sources = {n.get('source','') for n in fast if n.get('type')=='message'}
-merged = fast + [n for n in slow if n.get('type')=='message' and n.get('source','') not in sources]
+if sock_notifs: sources.add('slack')
+merged = fast + sock_notifs
+merged += [n for n in slow if n.get('type')=='message' and n.get('source','') not in sources]
 print(json.dumps(merged))
 " 2>/dev/null)
     if [[ -n "$RESULT" ]]; then
