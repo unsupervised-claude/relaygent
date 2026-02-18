@@ -11,8 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import (CONTEXT_THRESHOLD, HANG_CHECK_DELAY, INCOMPLETE_BASE_DELAY,
-                     MAX_INCOMPLETE_RETRIES, MAX_RETRIES, Timer, cleanup_old_workspaces,
-                     get_workspace_dir, log, set_status)
+                     MAX_INCOMPLETE_RETRIES, MAX_RETRIES, SILENCE_TIMEOUT, Timer,
+                     cleanup_old_workspaces, get_workspace_dir, log, set_status)
 from jsonl_checks import should_sleep
 from process import ClaudeProcess
 from relay_utils import acquire_lock, cleanup_context_file, commit_kb, kill_orphaned_claudes, notify_crash, rotate_log
@@ -67,7 +67,7 @@ class RelayRunner:
         while not self.timer.is_expired():
             set_status("working")
             if session_established:
-                msg = (f"Your previous API call failed after {HANG_CHECK_DELAY} seconds. "
+                msg = (f"Your previous API call failed after {SILENCE_TIMEOUT} seconds. "
                        f"Please proceed with the original instructions.")
                 log_start = self.claude.resume(msg)
             else:
