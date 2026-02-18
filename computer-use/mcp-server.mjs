@@ -12,6 +12,8 @@ const IS_LINUX = platform() === "linux";
 
 const server = new McpServer({ name: "computer-use", version: "1.0.0" });
 const n = z.coerce.number();
+// Claude sometimes serializes booleans as strings ("true"/"false") — coerce safely
+const bool = z.preprocess(v => v === "true" ? true : v === "false" ? false : v, z.boolean().optional());
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const ACTION_DELAY = 1500;
 const actionRes = async (text, delay, indicator) => ({
@@ -38,8 +40,8 @@ server.tool("screenshot", "Capture screenshot. Use find_elements for precise coo
 
 server.tool("click", "Click at coordinates. Auto-returns screenshot.",
 	{ x: n.describe("X"), y: n.describe("Y"),
-		right: z.boolean().optional().describe("Right-click"),
-		double: z.boolean().optional().describe("Double-click"),
+		right: bool.describe("Right-click"),
+		double: bool.describe("Double-click"),
 		modifiers: z.array(z.string()).optional().describe("Modifier keys: shift, cmd, alt, ctrl") },
 	async (p) => { await hsCall("POST", "/click", p); return actionRes(`Clicked (${p.x},${p.y})`, 400, {x: p.x, y: p.y}); }
 );
@@ -47,7 +49,7 @@ server.tool("click", "Click at coordinates. Auto-returns screenshot.",
 server.tool("click_sequence", "Multiple clicks in one call. Auto-returns screenshot.",
 	{ clicks: z.array(z.object({
 		x: n.describe("X"), y: n.describe("Y"),
-		right: z.boolean().optional(), double: z.boolean().optional(),
+		right: bool, double: bool,
 		modifiers: z.array(z.string()).optional(),
 		delay: n.optional().describe("Delay after click ms (default: 300)"),
 	})).describe("Array of clicks") },

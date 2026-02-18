@@ -7,6 +7,8 @@ import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick } from "./cdp.mjs";
 
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
+// Claude sometimes serializes booleans as strings ("true"/"false") — coerce safely
+const bool = z.preprocess(v => v === "true" ? true : v === "false" ? false : v, z.boolean().optional());
 
 // Deep query helpers — traverse shadow DOMs so browser tools can reach web component internals
 const _deep = `function _dqa(s,r){r=r||document;var o=Array.from(r.querySelectorAll(s));` +
@@ -83,7 +85,7 @@ export function registerBrowserTools(server, IS_LINUX) {
   server.tool("browser_navigate",
     "Navigate browser to a URL via CDP (fast) or keyboard fallback. Auto-returns screenshot.",
     { url: z.string().describe("URL to navigate to"),
-      new_tab: z.boolean().optional().describe("Open in new tab") },
+      new_tab: bool.describe("Open in new tab") },
     async ({ url, new_tab }) => {
       if (!new_tab && await cdpNavigate(url)) return actionRes(`Navigated to ${url}`, 1500);
       const mod = IS_LINUX ? "ctrl" : "cmd";
@@ -119,8 +121,8 @@ export function registerBrowserTools(server, IS_LINUX) {
     "Type text into a web input via JS injection (avoids address bar capture). Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector for the input"),
       text: z.string().describe("Text to type"),
-      submit: z.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())"),
-      slow: z.boolean().optional().describe("Type char-by-char with key events (for autocomplete/typeahead inputs)") },
+      submit: bool.describe("Submit form after typing (dispatches Enter + form.submit())"),
+      slow: bool.describe("Type char-by-char with key events (for autocomplete/typeahead inputs)") },
     async ({ selector, text, submit, slow }) => {
       const expr = slow ? TYPE_SLOW_EXPR(selector, text, submit) : TYPE_EXPR(selector, text, submit);
       const result = slow ? await cdpEvalAsync(expr) : await cdpEval(expr);
