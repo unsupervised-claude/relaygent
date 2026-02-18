@@ -150,22 +150,20 @@ function startChatWatcher() {
 	});
 }
 
-// --- Hook output watcher: broadcast PostToolUse context to dashboard ---
+// --- Hook output poller: broadcast PostToolUse context to dashboard ---
+// Uses polling instead of fs.watch because atomic rename (mv tmp file) breaks inode watchers
 const HOOK_OUTPUT = '/tmp/relaygent-hook-output.json';
-let hookWatcher = null, lastHookTs = 0;
-function startHookWatcher() {
-	if (hookWatcher || !fs.existsSync(HOOK_OUTPUT)) return;
-	hookWatcher = fs.watch(HOOK_OUTPUT, () => {
-		try {
-			const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
-			if (data.ts && data.ts > lastHookTs) {
-				lastHookTs = data.ts;
-				broadcastRelay({ type: 'hook', data });
-			}
-		} catch { /* ignore */ }
-	});
+let lastHookTs = 0;
+function pollHookOutput() {
+	try {
+		const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
+		if (data.ts && data.ts > lastHookTs) {
+			lastHookTs = data.ts;
+			broadcastRelay({ type: 'hook', data });
+		}
+	} catch { /* file missing or invalid */ }
 }
-startHookWatcher();
+setInterval(pollHookOutput, 1000);
 
 setInterval(() => {
 	const current = findLatestSession();
@@ -178,7 +176,6 @@ setInterval(() => {
 
 relayWss.on('connection', (ws) => {
 	startWatching();
-	startHookWatcher();
 	const session = findLatestSession();
 	ws.send(JSON.stringify({ type: 'session', status: session ? 'found' : 'waiting' }));
 	// Send current hook output on connect
