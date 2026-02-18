@@ -88,5 +88,13 @@ for line in reversed(data.strip().split(chr(10))):
 fi
 
 export _HOOK_CTX="$CTX"
+# Write hook output to file for hub dashboard visibility
+HOOK_FILE="/tmp/relaygent-hook-output.json"
+_TOOL_NAME="${TOOL_NAME:-unknown}" _FILL="${FILL_PCT:-0}" python3 -c "
+import json,os,time
+data={'context':os.environ['_HOOK_CTX'],'tool':os.environ['_TOOL_NAME'],'fill_pct':int(os.environ['_FILL'] or 0),'ts':time.time()}
+with open('${HOOK_FILE}.tmp','w') as f: json.dump(data,f)
+os.rename('${HOOK_FILE}.tmp','${HOOK_FILE}')
+" 2>/dev/null
 python3 -c "import json,os; print(json.dumps({'hookSpecificOutput':{'hookEventName':'PostToolUse','additionalContext':os.environ['_HOOK_CTX']}}))"
 
