@@ -151,11 +151,14 @@ function startChatWatcher() {
 }
 
 // --- Hook output watcher: broadcast PostToolUse context to dashboard ---
+// Watch /tmp directory for the hook file — more reliable than watching the file
+// directly, since atomic rename (write .tmp → rename) replaces the inode on Linux.
 const HOOK_OUTPUT = '/tmp/relaygent-hook-output.json';
-let hookWatcher = null, lastHookTs = 0;
-function startHookWatcher() {
-	if (hookWatcher || !fs.existsSync(HOOK_OUTPUT)) return;
-	hookWatcher = fs.watch(HOOK_OUTPUT, () => {
+const HOOK_FILENAME = path.basename(HOOK_OUTPUT);
+let lastHookTs = 0;
+try {
+	fs.watch('/tmp', (_, filename) => {
+		if (filename !== HOOK_FILENAME) return;
 		try {
 			const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
 			if (data.ts && data.ts > lastHookTs) {
@@ -164,8 +167,7 @@ function startHookWatcher() {
 			}
 		} catch { /* ignore */ }
 	});
-}
-startHookWatcher();
+} catch { /* /tmp not watchable */ }
 
 setInterval(() => {
 	const current = findLatestSession();
@@ -178,10 +180,9 @@ setInterval(() => {
 
 relayWss.on('connection', (ws) => {
 	startWatching();
-	startHookWatcher();
 	const session = findLatestSession();
 	ws.send(JSON.stringify({ type: 'session', status: session ? 'found' : 'waiting' }));
-	// Send current hook output on connect
+	// Send current hook output on connect so bar is populated immediately
 	try {
 		const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
 		ws.send(JSON.stringify({ type: 'hook', data }));
