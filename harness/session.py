@@ -96,10 +96,8 @@ class SleepManager:
 
     def _wait_for_wake(self) -> tuple[bool, list]:
         """Poll cache file for wake condition. Returns (woken, notifications)."""
-        # Note: Slack dedup keys use format slack-{channel_id}-{unread_count},
-        # so new messages naturally produce new keys (count changes).
-        # Don't clear Slack dedup keys here — causes infinite wake loop
-        # when channels have permanent phantom unreads (missing write scopes).
+        # Slack dedup keys include unread count, so new messages produce new keys.
+        # Don't clear them here — causes infinite wake loop on channels with phantom unreads.
         set_status("sleeping")
         log("Sleeping, waiting for notifications...")
 
@@ -179,10 +177,16 @@ class SleepManager:
                     log(f"Too many wake retries ({wake_retries}), giving up on this wake cycle")
                     break
                 delay = min(INCOMPLETE_BASE_DELAY * (2 ** (wake_retries - 1)), 60)
-                kind = "Hung during wake" if claude_result.hung else "Exited mid-conversation during wake"
-                log(f"{kind} ({wake_retries}/{MAX_INCOMPLETE_RETRIES}), resuming in {delay}s...")
+                kind, resume_msg = (
+                    ("Hung", "An API error was detected. Continue where you left off.")
+                    if claude_result.hung else
+                    ("Incomplete", "Continue where you left off.")
+                    if claude_result.incomplete else
+                    ("No output", "Your wake session exited without output. Continue where you left off.")
+                )
+                log(f"{kind} during wake ({wake_retries}/{MAX_INCOMPLETE_RETRIES}), resuming in {delay}s...")
                 time.sleep(delay)
-                log_start = claude.resume("Continue where you left off.")
+                log_start = claude.resume(resume_msg)
                 claude_result = claude.monitor(log_start)
                 if claude_result.timed_out:
                     return None
