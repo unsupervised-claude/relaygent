@@ -154,7 +154,7 @@ function startChatWatcher() {
 const HOOK_OUTPUT = '/tmp/relaygent-hook-output.json';
 let hookWatcher = null, lastHookTs = 0;
 function startHookWatcher() {
-	if (hookWatcher) return;
+	if (hookWatcher || !fs.existsSync(HOOK_OUTPUT)) return;
 	hookWatcher = fs.watch(HOOK_OUTPUT, () => {
 		try {
 			const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
@@ -165,7 +165,7 @@ function startHookWatcher() {
 		} catch { /* ignore */ }
 	});
 }
-try { if (fs.existsSync(HOOK_OUTPUT)) startHookWatcher(); } catch {}
+startHookWatcher();
 
 setInterval(() => {
 	const current = findLatestSession();
