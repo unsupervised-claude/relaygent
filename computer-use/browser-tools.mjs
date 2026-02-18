@@ -40,11 +40,14 @@ const TEXT_CLICK_EXPR = (text, idx) =>
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight)),` +
   `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
 
-const TYPE_EXPR = (sel, text) =>
+const TYPE_EXPR = (sel, text, submit) =>
   `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
   `if(!el)return 'not found';el.focus();el.value=${JSON.stringify(text)};` +
   `el.dispatchEvent(new Event('input',{bubbles:true}));` +
-  `el.dispatchEvent(new Event('change',{bubbles:true}));return el.value})()`;
+  `el.dispatchEvent(new Event('change',{bubbles:true}));` +
+  (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));` +
+  `var f=el.closest('form');if(f)f.submit();` : ``) +
+  `return el.value})()`;
 
 const WAIT_EXPR = (sel, timeoutMs) =>
   `(function(){return new Promise((res,rej)=>{` +
@@ -93,11 +96,12 @@ export function registerBrowserTools(server, IS_LINUX) {
   server.tool("browser_type",
     "Type text into a web input via JS injection (avoids address bar capture). Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector for the input"),
-      text: z.string().describe("Text to type") },
-    async ({ selector, text }) => {
-      const result = await cdpEval(TYPE_EXPR(selector, text));
+      text: z.string().describe("Text to type"),
+      submit: z.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())") },
+    async ({ selector, text, submit }) => {
+      const result = await cdpEval(TYPE_EXPR(selector, text, submit));
       if (result === "not found") return jsonRes({ error: `Element not found: ${selector}` });
-      return actionRes(`Typed into ${selector}: "${text}"`, 400);
+      return actionRes(`Typed into ${selector}: "${text}"${submit ? " (submitted)" : ""}`, submit ? 1500 : 400);
     }
   );
 
