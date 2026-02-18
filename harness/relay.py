@@ -135,6 +135,7 @@ class RelayRunner:
 
             session_established = True
             incomplete_count = 0
+            crash_count = 0
 
             if result.context_pct >= CONTEXT_THRESHOLD and self.timer.has_successor_time():
                 session_id = self._spawn_successor(
