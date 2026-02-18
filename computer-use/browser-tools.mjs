@@ -8,22 +8,27 @@ import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick } from "./cdp.mjs";
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
 
-const COORD_EXPR = (sel) =>
-  `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
-  `if(!el)return null;var r=el.getBoundingClientRect();` +
+// Prefer first visible element matching selector (skip hidden 0x0 elements)
+const _vis = `var a=document.querySelectorAll(S);` +
+  `var el=Array.from(a).find(e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0)||a[0];`;
+const _coords = `var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
-  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
+  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})`;
+
+const COORD_EXPR = (sel) =>
+  `(function(){var S=${JSON.stringify(sel)};${_vis}if(!el)return null;${_coords}})()`;
 
 const CLICK_EXPR = (sel) =>
-  `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
-  `if(!el)return null;el.click();var r=el.getBoundingClientRect();` +
-  `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
-  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
+  `(function(){var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.click();${_coords}})()`;
+
+// Normalize nbsp + curly quotes for text matching
+const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
+const _textSel = `'a,button,input[type=submit],input[type=button],[role=button]'`;
 
 const TEXT_COORD_EXPR = (text, idx) =>
-  `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
-  `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
-  `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
+  `(function(){${_norm};var t=norm(${JSON.stringify(text)}),i=${idx};` +
+  `var els=Array.from(document.querySelectorAll(${_textSel}));` +
+  `var matches=els.filter(e=>e.offsetParent!==null&&norm(e.innerText||e.value||'').includes(t));` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
@@ -31,20 +36,23 @@ const TEXT_COORD_EXPR = (text, idx) =>
   `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
 
 const TEXT_CLICK_EXPR = (text, idx) =>
-  `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
-  `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
-  `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
+  `(function(){${_norm};var t=norm(${JSON.stringify(text)}),i=${idx};` +
+  `var els=Array.from(document.querySelectorAll(${_textSel}));` +
+  `var matches=els.filter(e=>e.offsetParent!==null&&norm(e.innerText||e.value||'').includes(t));` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `el.click();var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight)),` +
   `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
 
-const TYPE_EXPR = (sel, text) =>
+const TYPE_EXPR = (sel, text, submit) =>
   `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
   `if(!el)return 'not found';el.focus();el.value=${JSON.stringify(text)};` +
   `el.dispatchEvent(new Event('input',{bubbles:true}));` +
-  `el.dispatchEvent(new Event('change',{bubbles:true}));return el.value})()`;
+  `el.dispatchEvent(new Event('change',{bubbles:true}));` +
+  (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));` +
+  `var f=el.closest('form');if(f)f.submit();` : ``) +
+  `return el.value})()`;
 
 const WAIT_EXPR = (sel, timeoutMs) =>
   `(function(){return new Promise((res,rej)=>{` +
@@ -93,11 +101,12 @@ export function registerBrowserTools(server, IS_LINUX) {
   server.tool("browser_type",
     "Type text into a web input via JS injection (avoids address bar capture). Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector for the input"),
-      text: z.string().describe("Text to type") },
-    async ({ selector, text }) => {
-      const result = await cdpEval(TYPE_EXPR(selector, text));
+      text: z.string().describe("Text to type"),
+      submit: z.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())") },
+    async ({ selector, text, submit }) => {
+      const result = await cdpEval(TYPE_EXPR(selector, text, submit));
       if (result === "not found") return jsonRes({ error: `Element not found: ${selector}` });
-      return actionRes(`Typed into ${selector}: "${text}"`, 400);
+      return actionRes(`Typed into ${selector}: "${text}"${submit ? " (submitted)" : ""}`, submit ? 1500 : 400);
     }
   );
 
