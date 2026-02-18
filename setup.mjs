@@ -42,11 +42,7 @@ async function main() {
 
 	console.log(`Sets up a persistent AI agent with a web dashboard.\n`);
 
-	// Agent identity
-	const agentNameInput = (await ask(`${C.cyan}Agent name [relaygent]:${C.reset} `)).trim();
-	const agentName = agentNameInput || 'relaygent';
-	const agentEmail = (await ask(`${C.cyan}Agent email (optional, for identity/services):${C.reset} `)).trim();
-
+	const agentName = 'relaygent';
 	const hubPort = 8080;
 
 	// Write config
@@ -57,7 +53,7 @@ async function main() {
 	mkdirSync(DATA_DIR, { recursive: true });
 
 	const config = {
-		agent: { name: agentName, ...(agentEmail && { email: agentEmail }) },
+		agent: { name: agentName },
 		hub: { port: hubPort },
 		services: {
 			notifications: { port: hubPort + 3 },
@@ -93,7 +89,7 @@ async function main() {
 		const gitOpts = { cwd: kbRoot, stdio: 'pipe' };
 		spawnSync('git', ['init'], gitOpts);
 		spawnSync('git', ['config', 'user.name', agentName], gitOpts);
-		spawnSync('git', ['config', 'user.email', agentEmail || `${agentName}@localhost`], gitOpts);
+		spawnSync('git', ['config', 'user.email', `${agentName}@localhost`], gitOpts);
 		spawnSync('git', ['add', '-A'], gitOpts);
 		spawnSync('git', ['commit', '-m', 'Initial KB'], gitOpts);
 		console.log(`  KB git: initialized`);
