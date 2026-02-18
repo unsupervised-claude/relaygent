@@ -166,6 +166,7 @@ do_stop() {
     for svc in Computer-use:computer-use Hub:hub Notifications:notifications; do
         stop_process "${svc%%:*}" "${svc##*:}"
     done
+    stop_process "Xvfb" "xvfb"
     for pn in "${HUB_PORT:-8080}:Hub" "${NOTIF_PORT:-8083}:Notifications"; do
         local pids; pids=$(port_pids "${pn%%:*}") || true
         [ -n "$pids" ] && kill $pids 2>/dev/null && echo -e "  ${pn##*:} orphan: ${YELLOW}killed${NC}" || true
