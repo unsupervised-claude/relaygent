@@ -61,15 +61,14 @@ class RelayRunner:
         signal.signal(signal.SIGTERM, _shutdown)
         signal.signal(signal.SIGINT, _shutdown)
         session_established = False
+        resume_reason = ""
         crash_count = 0
         incomplete_count = 0
 
         while not self.timer.is_expired():
             set_status("working")
             if session_established:
-                msg = (f"Your previous API call failed after {SILENCE_TIMEOUT} seconds. "
-                       f"Please proceed with the original instructions.")
-                log_start = self.claude.resume(msg)
+                log_start = self.claude.resume(resume_reason)
             else:
                 log_start = self.claude.start_fresh()
 
@@ -81,6 +80,8 @@ class RelayRunner:
                 set_status("crashed")
                 log("Hung, resuming...")
                 session_established = True
+                resume_reason = ("An API error was detected (no response or repeated failures). "
+                                 "Please proceed with the original instructions.")
                 time.sleep(15)
                 continue
 
@@ -90,9 +91,12 @@ class RelayRunner:
                     session_id = str(uuid.uuid4())
                     self.claude.session_id = session_id
                     session_established = False
+                    resume_reason = ""
                 else:
                     log("Exited without output, resuming...")
                     session_established = True
+                    resume_reason = ("Your previous session exited without producing output. "
+                                     "Please proceed with the original instructions.")
                 time.sleep(5)
                 continue
 
@@ -103,6 +107,7 @@ class RelayRunner:
                     session_id = str(uuid.uuid4())
                     self.claude.session_id = session_id
                     session_established = False
+                    resume_reason = ""
                     incomplete_count = 0
                     time.sleep(15)
                 else:
@@ -110,6 +115,7 @@ class RelayRunner:
                     log(f"Exited mid-conversation ({incomplete_count}/{MAX_INCOMPLETE_RETRIES}), "
                         f"resuming in {delay}s...")
                     session_established = True
+                    resume_reason = "Continue where you left off."
                     time.sleep(delay)
                 continue
 
@@ -124,12 +130,15 @@ class RelayRunner:
                 session_id = str(uuid.uuid4())
                 self.claude.session_id = session_id
                 session_established = False
+                resume_reason = ""
                 time.sleep(15)
                 continue
 
             if not should_sleep(self.claude.session_id, self.claude.workspace):
                 log("Session incomplete (no stdout), resuming...")
                 session_established = True
+                resume_reason = (f"Your previous API call failed after {SILENCE_TIMEOUT} seconds. "
+                                 f"Please proceed with the original instructions.")
                 time.sleep(2)
                 continue
 
