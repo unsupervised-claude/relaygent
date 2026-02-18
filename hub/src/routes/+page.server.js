@@ -4,6 +4,15 @@ import { getServiceHealth } from '$lib/serviceHealth.js';
 import fs from 'fs';
 import path from 'path';
 
+const CONFIG_PATH = path.join(process.env.HOME, '.relaygent', 'config.json');
+
+function getModel() {
+	try {
+		const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+		return config.model || null;
+	} catch { return null; }
+}
+
 function getMainGoal() {
 	const handoffPath = path.join(getKbDir(), 'handoff.md');
 	try {
@@ -56,5 +65,6 @@ export async function load() {
 		relayActivity: clockActivity?.recentActivity || [],
 		contextPct: getContextPct(),
 		services,
+		currentModel: getModel(),
 	};
 }

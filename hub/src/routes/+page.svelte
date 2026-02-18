@@ -15,6 +15,28 @@
 	let sessionStatus = $state(data.relayActivity?.length > 0 ? 'found' : 'waiting');
 	let ws = null;
 	let loading = $state(false), hasMore = $state(true);
+	let currentModel = $state(data.currentModel || '');
+	let modelSaving = $state(false);
+
+	const MODEL_OPTIONS = [
+		{ id: 'claude-opus-4-6', label: 'Opus 4.6' },
+		{ id: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5' },
+		{ id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+	];
+
+	async function setModel(e) {
+		const model = e.target.value;
+		modelSaving = true;
+		try {
+			const res = await fetch('/api/model', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ model }),
+			});
+			if (res.ok) currentModel = model;
+		} catch { /* ignore */ }
+		modelSaving = false;
+	}
 
 	async function reloadPageData() {
 		try {
@@ -77,6 +99,14 @@
 		<span class="relay-label">Relay</span>
 		<span class="badge" class:on={connected}>{connected ? 'Live' : 'Offline'}</span>
 	</div>
+	<div class="model-picker">
+		<select value={currentModel} onchange={setModel} disabled={modelSaving}>
+			<option value="" disabled>Model...</option>
+			{#each MODEL_OPTIONS as opt}
+				<option value={opt.id}>{opt.label}</option>
+			{/each}
+		</select>
+	</div>
 	{#if data.services?.length}
 	<div class="svc-row">
 		{#each data.services as svc}
@@ -135,6 +165,8 @@
 	@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 	.badge { font-size: 0.75em; padding: 0.15em 0.5em; border-radius: 10px; background: #fee2e2; color: #dc2626; }
 	.badge.on { background: #dcfce7; color: #16a34a; }
+	.model-picker select { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.2em 0.4em; font-size: 0.78em; cursor: pointer; }
+	.model-picker select:hover { border-color: var(--text-muted); }  .model-picker select:disabled { opacity: 0.5; cursor: wait; }
 	.svc-row { display: flex; flex-wrap: wrap; gap: 0.4em 0.8em; margin-left: auto; }
 	.svc { display: flex; align-items: center; gap: 0.3em; font-size: 0.78em; color: var(--text-muted); }
 	.svc .dot { width: 5px; height: 5px; border-radius: 50%; }
