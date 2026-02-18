@@ -185,7 +185,7 @@ do_status() {
     if [ "$(uname)" = "Darwin" ]; then
         pgrep -x Hammerspoon >/dev/null 2>&1 && echo -e "  Hammerspoon: ${GREEN}running${NC}" \
             || echo -e "  Hammerspoon: ${RED}stopped${NC}"
-    elif [ "$(uname)" = "Linux" ]; then check_process "Computer-use" "computer-use"; fi
+    elif [ "$(uname)" = "Linux" ]; then check_process "Computer-use" "computer-use"; check_process "Xvfb" "xvfb"; fi
 }
 
 case "${1:-help}" in
