@@ -108,10 +108,28 @@ export function runOsascript(code, ms = 8000) {
 	});
 }
 
+// Short-lived cache for the a11y tree — reused within a single find→click sequence.
+// TTL is intentionally brief (1.5s) so the cache is never stale in real interactions.
+const _axCache = new Map(); // key: app|"" → { tree, ts }
+const AX_CACHE_TTL = 1500;
+
+function _getCachedTree(app) {
+	const key = app || "";
+	const entry = _axCache.get(key);
+	if (entry && Date.now() - entry.ts < AX_CACHE_TTL) return entry.tree;
+	return null;
+}
+
+function _setCachedTree(app, tree) {
+	_axCache.set(app || "", { tree, ts: Date.now() });
+}
+
 /** Search accessibility tree for elements matching role/title. */
 export async function findElements({ role, title, app, limit }) {
-	const tree = await hsCall("POST", "/accessibility", { app, depth: 8 }, 30000);
+	const cached = _getCachedTree(app);
+	const tree = cached ?? await hsCall("POST", "/accessibility", { app, depth: 8 }, 30000);
 	if (tree.error) return { error: tree.error };
+	if (!cached) _setCachedTree(app, tree);
 	const max = limit || 30;
 	const results = [];
 	const titleLower = title?.toLowerCase();
