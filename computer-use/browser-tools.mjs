@@ -8,18 +8,24 @@ import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick } from "./cdp.mjs";
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
 
+// Deep query helpers — traverse shadow DOMs so browser tools can reach web component internals
+const _deep = `function _dqa(s,r){r=r||document;var o=Array.from(r.querySelectorAll(s));` +
+  `r.querySelectorAll('*').forEach(function(e){if(e.shadowRoot)o=o.concat(_dqa(s,e.shadowRoot))});return o}` +
+  `function _dq(s,r){r=r||document;var e=r.querySelector(s);if(e)return e;` +
+  `var a=r.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot){e=_dq(s,a[i].shadowRoot);if(e)return e}}return null}`;
+
 // Prefer first visible element matching selector (skip hidden 0x0 elements); no fallback to hidden
-const _vis = `var a=document.querySelectorAll(S);` +
-  `var el=Array.from(a).find(e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0);`;
+const _vis = `var a=_dqa(S);` +
+  `var el=a.find(function(e){return e.offsetParent!==null&&e.getBoundingClientRect().width>0});`;
 const _coords = `var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})`;
 
 const COORD_EXPR = (sel) =>
-  `(function(){var S=${JSON.stringify(sel)};${_vis}if(!el)return null;${_coords}})()`;
+  `(function(){${_deep}var S=${JSON.stringify(sel)};${_vis}if(!el)return null;${_coords}})()`;
 
 const CLICK_EXPR = (sel) =>
-  `(function(){var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.click();${_coords}})()`;
+  `(function(){${_deep}var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.click();${_coords}})()`;
 
 // Normalize nbsp + curly quotes for text matching
 const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
@@ -27,10 +33,10 @@ const _textSel = `'a,button,input[type=submit],input[type=button],[role=button]'
 
 // Exact match preferred over substring match for text-based element finding
 const TEXT_MATCH_EXPR = (text, idx, click) =>
-  `(function(){${_norm};var t=norm(${JSON.stringify(text)}),i=${idx};` +
-  `var els=Array.from(document.querySelectorAll(${_textSel})).filter(e=>e.offsetParent!==null);` +
-  `var exact=els.filter(e=>norm(e.innerText||e.value||'').trim()===t);` +
-  `var matches=exact.length?exact:els.filter(e=>norm(e.innerText||e.value||'').includes(t));` +
+  `(function(){${_deep}${_norm};var t=norm(${JSON.stringify(text)}),i=${idx};` +
+  `var els=_dqa(${_textSel}).filter(function(e){return e.offsetParent!==null});` +
+  `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
+  `var matches=exact.length?exact:els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)});` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   (click ? `el.click();` : ``) +
   `var r=el.getBoundingClientRect();` +
@@ -42,7 +48,7 @@ const TEXT_COORD_EXPR = (text, idx) => TEXT_MATCH_EXPR(text, idx, false);
 const TEXT_CLICK_EXPR = (text, idx) => TEXT_MATCH_EXPR(text, idx, true);
 
 const TYPE_EXPR = (sel, text, submit) =>
-  `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
+  `(function(){${_deep}var el=_dq(${JSON.stringify(sel)});` +
   `if(!el)return 'not found';el.focus();el.value=${JSON.stringify(text)};` +
   `el.dispatchEvent(new Event('input',{bubbles:true}));` +
   `el.dispatchEvent(new Event('change',{bubbles:true}));` +
@@ -51,9 +57,9 @@ const TYPE_EXPR = (sel, text, submit) =>
   `return el.value})()`;
 
 const WAIT_EXPR = (sel, timeoutMs) =>
-  `(function(){return new Promise((res,rej)=>{` +
+  `(function(){${_deep}return new Promise(function(res,rej){` +
   `var t=Date.now(),limit=${timeoutMs};` +
-  `(function poll(){var el=document.querySelector(${JSON.stringify(sel)});` +
+  `(function poll(){var el=_dq(${JSON.stringify(sel)});` +
   `if(el&&el.offsetParent!==null)return res('found');` +
   `if(Date.now()-t>limit)return rej('timeout');` +
   `setTimeout(poll,100)})()})})()`;
@@ -139,7 +145,7 @@ export function registerBrowserTools(server, IS_LINUX) {
       selector: z.string().optional().describe("Scroll inside this element (default: window)") },
     async ({ x = 0, y = 300, selector }) => {
       const expr = selector
-        ? `(function(){var el=document.querySelector(${JSON.stringify(selector)});if(el)el.scrollBy(${x},${y});return !!el})()`
+        ? `(function(){${_deep}var el=_dq(${JSON.stringify(selector)});if(el)el.scrollBy(${x},${y});return !!el})()`
         : `window.scrollBy(${x},${y});true`;
       await cdpEval(expr);
       return actionRes(`Scrolled (${x},${y})${selector ? ` in ${selector}` : ""}`, 300);
