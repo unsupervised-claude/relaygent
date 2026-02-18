@@ -115,8 +115,17 @@ do_start() {
             echo -e "  Computer-use: ${YELLOW}missing deps:${missing}${NC}"
             echo -e "    ${YELLOW}Install: sudo apt install xdotool scrot wmctrl imagemagick python3-pyatspi at-spi2-core${NC}"
         elif [ -z "${DISPLAY:-}" ]; then
-            echo -e "  Computer-use: ${YELLOW}no DISPLAY set (headless?)${NC}"
-        else
+            if command -v Xvfb &>/dev/null; then
+                export DISPLAY=:99
+                Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp >> "$SCRIPT_DIR/logs/relaygent-xvfb.log" 2>&1 &
+                echo $! > "$PID_DIR/xvfb.pid"
+                sleep 0.5
+                echo -e "  Xvfb: ${GREEN}started${NC} (DISPLAY=:99)"
+            else
+                echo -e "  Computer-use: ${YELLOW}no DISPLAY set and Xvfb not found${NC}"
+            fi
+        fi
+        if [ -n "${DISPLAY:-}" ]; then
             check_port "$HS_PORT" "Computer-use" || port_ok=false
             if [ "$port_ok" = true ]; then
                 start_service "Computer-use (port $HS_PORT)" "computer-use" \
