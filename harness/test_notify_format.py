@@ -97,3 +97,31 @@ class TestFormatNotifications:
         notifs = [{"type": "signal", "message": "New signal msg"}]
         result = format_notifications(notifs)
         assert "[signal]" in result
+
+
+class TestFormatChatSlack:
+    def test_slack_notification_format(self):
+        notifs = [{"source": "slack", "count": 3, "channels": [{"name": "general"}]}]
+        result = format_chat(notifs)
+        assert len(result) == 1
+        assert "3" in result[0]
+        assert "general" in result[0]
+
+    def test_slack_multiple_channels(self):
+        notifs = [{"source": "slack", "count": 5,
+                   "channels": [{"name": "general"}, {"name": "dev"}]}]
+        result = format_chat(notifs)
+        assert "general" in result[0]
+        assert "dev" in result[0]
+
+    def test_slack_channel_id_fallback(self):
+        """Falls back to channel ID when name is missing."""
+        notifs = [{"source": "slack", "count": 1,
+                   "channels": [{"id": "C0ABC123"}]}]
+        result = format_chat(notifs)
+        assert "C0ABC123" in result[0]
+
+    def test_slack_missing_count_defaults_zero(self):
+        notifs = [{"source": "slack", "channels": [{"name": "general"}]}]
+        result = format_chat(notifs)
+        assert "0" in result[0]
