@@ -17,6 +17,7 @@
 	let loading = $state(false), hasMore = $state(true);
 	let currentModel = $state(data.currentModel || '');
 	let modelSaving = $state(false);
+	let hookCtx = $state('');
 
 	const MODEL_OPTIONS = [
 		{ id: 'claude-opus-4-6', label: 'Opus 4.6' },
@@ -61,6 +62,7 @@
 			} else if (msg.type === 'result' && msg.toolUseId) {
 				activities = activities.map(a => a.toolUseId === msg.toolUseId ? { ...a, result: msg.result, fullResult: msg.fullResult } : a);
 			} else if (msg.type === 'context') { contextPct = msg.pct; }
+			else if (msg.type === 'hook') { hookCtx = msg.data?.context || ''; }
 			else if (msg.type === 'session') {
 				sessionStatus = msg.status;
 				if (msg.status === 'found') reloadPageData();
@@ -118,6 +120,10 @@
 	{/if}
 </section>
 
+{#if hookCtx}
+<div class="hook-ctx">{hookCtx}</div>
+{/if}
+
 {#if data.mainGoal}
 <section class="goal">
 	<div class="gl">Focus</div>
@@ -158,13 +164,13 @@
 
 <style>
 	.status-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75em; padding: 0.6em 1em; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1em; }
-	.status-item { display: flex; align-items: center; gap: 0.5em; }
-	.relay-label { font-weight: 600; color: var(--text); }
+	.status-item { display: flex; align-items: center; gap: 0.5em; }  .relay-label { font-weight: 600; color: var(--text); }
 	.indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
 	.indicator.pulse { background: #22c55e; animation: pulse 2s infinite; }
 	@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 	.badge { font-size: 0.75em; padding: 0.15em 0.5em; border-radius: 10px; background: #fee2e2; color: #dc2626; }
 	.badge.on { background: #dcfce7; color: #16a34a; }
+	.hook-ctx { font-size: 0.72em; color: var(--text-muted); padding: 0.3em 1em; background: var(--code-bg); border-radius: 6px; margin-bottom: 0.75em; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.model-picker select { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.2em 0.4em; font-size: 0.78em; cursor: pointer; }
 	.model-picker select:hover { border-color: var(--text-muted); }  .model-picker select:disabled { opacity: 0.5; cursor: wait; }
 	.svc-row { display: flex; flex-wrap: wrap; gap: 0.4em 0.8em; margin-left: auto; }
@@ -179,17 +185,14 @@
 	.attention h3 { margin: 0 0 0.3em; font-size: 0.9em; color: var(--text-muted); }
 	.att-item { display: flex; justify-content: space-between; gap: 0.5em; padding: 0.4em 0.6em; background: var(--code-bg); border-radius: 4px; margin-bottom: 0.3em; font-size: 0.88em; }
 	.att-item :global(strong) { color: var(--link); }
-	.x, .clear-all { background: none; border: none; color: var(--text-muted); cursor: pointer; }
-	.x:hover, .clear-all:hover { color: var(--text); }
+	.x, .clear-all { background: none; border: none; color: var(--text-muted); cursor: pointer; }  .x:hover, .clear-all:hover { color: var(--text); }
 	.clear-all { font-size: 0.75em; border: 1px solid var(--border); padding: 0.2em 0.4em; border-radius: 4px; }
 	.waiting { text-align: center; padding: 3em 1em; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1em; }
 	.waiting-icon { font-size: 2em; margin-bottom: 0.5em; animation: pulse 2s infinite; }
 	.waiting-text { font-size: 1.1em; font-weight: 600; color: var(--text); margin-bottom: 0.3em; }
-	.waiting-hint { font-size: 0.85em; color: var(--text-muted); }
-	.screen-toggle { margin-bottom: 1em; }
+	.waiting-hint { font-size: 0.85em; color: var(--text-muted); }  .screen-toggle { margin-bottom: 1em; }
 	.toggle-btn { display: flex; align-items: center; gap: 0.4em; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.3em 0.7em; font-size: 0.82em; font-weight: 600; color: var(--text-muted); cursor: pointer; }
-	.toggle-btn:hover { color: var(--text); border-color: var(--text-muted); }
-	.toggle-arrow { font-size: 0.7em; }
+	.toggle-btn:hover { color: var(--text); border-color: var(--text-muted); }  .toggle-arrow { font-size: 0.7em; }
 	.screen-wrap { margin-top: 0.5em; }
 	@media (max-width: 768px) {
 		.goal { flex-direction: column; gap: 0.25em; }

@@ -150,6 +150,23 @@ function startChatWatcher() {
 	});
 }
 
+// --- Hook output watcher: broadcast PostToolUse context to dashboard ---
+const HOOK_OUTPUT = '/tmp/relaygent-hook-output.json';
+let hookWatcher = null, lastHookTs = 0;
+function startHookWatcher() {
+	if (hookWatcher || !fs.existsSync(HOOK_OUTPUT)) return;
+	hookWatcher = fs.watch(HOOK_OUTPUT, () => {
+		try {
+			const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
+			if (data.ts && data.ts > lastHookTs) {
+				lastHookTs = data.ts;
+				broadcastRelay({ type: 'hook', data });
+			}
+		} catch { /* ignore */ }
+	});
+}
+startHookWatcher();
+
 setInterval(() => {
 	const current = findLatestSession();
 	if (current && current !== watchedFile) {
@@ -161,9 +178,14 @@ setInterval(() => {
 
 relayWss.on('connection', (ws) => {
 	startWatching();
-	// Tell the client whether we have a session or not
+	startHookWatcher();
 	const session = findLatestSession();
 	ws.send(JSON.stringify({ type: 'session', status: session ? 'found' : 'waiting' }));
+	// Send current hook output on connect
+	try {
+		const data = JSON.parse(fs.readFileSync(HOOK_OUTPUT, 'utf-8'));
+		ws.send(JSON.stringify({ type: 'hook', data }));
+	} catch { /* no hook output yet */ }
 });
 chatWss.on('connection', () => { startChatWatcher(); });
 

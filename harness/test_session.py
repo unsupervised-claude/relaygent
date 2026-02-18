@@ -1,27 +1,18 @@
 """Tests for sleep/wake handling (session.py)."""
-
 from __future__ import annotations
-
-import json
-import os
-import sys
-import time
+import json, os, sys, time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-
 from session import SleepManager, SleepResult, MAX_CACHE_STALE
-
 
 @pytest.fixture
 def timer():
     t = MagicMock()
     t.is_expired.return_value = False
     return t
-
 
 @pytest.fixture
 def cache_file(tmp_path, monkeypatch):
@@ -132,12 +123,10 @@ class TestWaitForWake:
         assert woken and notifs[0]["type"] == "system"
 
     def test_force_wake_on_missing_cache(self, timer, cache_file, monkeypatch):
-        # Cache file doesn't exist; after MAX_CACHE_STALE seconds should force-wake
         mgr = SleepManager(timer)
         monkeypatch.setattr("session.NOTIFICATIONS_CACHE", str(cache_file) + ".gone")
         mgr._cache_missing_since = time.time() - MAX_CACHE_STALE - 1
-        with patch("session.set_status"), patch("session.log"), \
-             patch("session.time.sleep"):
+        with patch("session.set_status"), patch("session.log"), patch("session.time.sleep"):
             woken, notifs = mgr._wait_for_wake()
         assert woken and notifs[0]["type"] == "system"
 
@@ -157,8 +146,7 @@ class TestAutoSleepAndWake:
     def test_acks_slack_on_slack_notification(self, timer, cache_file):
         mgr = SleepManager(timer)
         cache_file.write_text(json.dumps(
-            [{"type": "slack", "source": "slack", "channels": [{"id": "C1", "unread": 1}]}]
-        ))
+            [{"type": "slack", "source": "slack", "channels": [{"id": "C1", "unread": 1}]}]))
         with patch("session.set_status"), patch("session.log"), \
              patch.object(mgr, "_ack_slack") as ack:
             mgr.auto_sleep_and_wake()
@@ -168,8 +156,7 @@ class TestAutoSleepAndWake:
         mgr = SleepManager(timer)
         cache_file.write_text(json.dumps(msg_notif()))
         with patch("session.set_status"), patch("session.log"), \
-             patch.object(mgr, "_ack_slack") as ack:
-            mgr.auto_sleep_and_wake()
+             patch.object(mgr, "_ack_slack") as ack: mgr.auto_sleep_and_wake()
         ack.assert_not_called()
 
 
@@ -201,8 +188,8 @@ class TestRunWakeCycle:
         claude = MagicMock()
         claude.resume.return_value = 0
         claude.monitor.side_effect = [_cr(hung=True), _cr(exit_code=0)]
-        wakes = [SleepResult(woken=True, wake_message="ping"), SleepResult(woken=False)]
-        with patch.object(mgr, "auto_sleep_and_wake", side_effect=wakes), \
+        with patch.object(mgr, "auto_sleep_and_wake", side_effect=[
+                SleepResult(woken=True, wake_message="ping"), SleepResult(woken=False)]), \
              patch("session.log"), patch("session.time.sleep"):
             mgr.run_wake_cycle(claude)
         assert claude.monitor.call_count == 2
