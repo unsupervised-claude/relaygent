@@ -21,6 +21,7 @@
 
 	const MODEL_OPTIONS = [
 		{ id: 'claude-opus-4-6', label: 'Opus 4.6' },
+		{ id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
 		{ id: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5' },
 		{ id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
 	];
@@ -187,10 +188,8 @@
 	.att-item :global(strong) { color: var(--link); }
 	.x, .clear-all { background: none; border: none; color: var(--text-muted); cursor: pointer; }  .x:hover, .clear-all:hover { color: var(--text); }
 	.clear-all { font-size: 0.75em; border: 1px solid var(--border); padding: 0.2em 0.4em; border-radius: 4px; }
-	.waiting { text-align: center; padding: 3em 1em; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1em; }
-	.waiting-icon { font-size: 2em; margin-bottom: 0.5em; animation: pulse 2s infinite; }
-	.waiting-text { font-size: 1.1em; font-weight: 600; color: var(--text); margin-bottom: 0.3em; }
-	.waiting-hint { font-size: 0.85em; color: var(--text-muted); }  .screen-toggle { margin-bottom: 1em; }
+	.waiting { text-align: center; padding: 3em 1em; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1em; }  .waiting-icon { font-size: 2em; margin-bottom: 0.5em; animation: pulse 2s infinite; }
+	.waiting-text { font-size: 1.1em; font-weight: 600; color: var(--text); margin-bottom: 0.3em; }  .waiting-hint { font-size: 0.85em; color: var(--text-muted); }  .screen-toggle { margin-bottom: 1em; }
 	.toggle-btn { display: flex; align-items: center; gap: 0.4em; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.3em 0.7em; font-size: 0.82em; font-weight: 600; color: var(--text-muted); cursor: pointer; }
 	.toggle-btn:hover { color: var(--text); border-color: var(--text-muted); }  .toggle-arrow { font-size: 0.7em; }
 	.screen-wrap { margin-top: 0.5em; }
