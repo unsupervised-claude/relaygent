@@ -8,6 +8,7 @@ const CDP_PORT = 9223;
 let _ws = null;
 let _msgId = 0;
 let _pending = new Map();
+let _events = [];  // one-shot CDP event listeners [{method, cb}]
 
 function log(msg) { process.stderr.write(`[cdp] ${msg}\n`); }
 
@@ -35,6 +36,9 @@ async function connectTab(wsUrl) {
         if (msg.id && _pending.has(msg.id)) {
           _pending.get(msg.id)(msg);
           _pending.delete(msg.id);
+        } else if (msg.method) {
+          const idx = _events.findIndex(e => e.method === msg.method);
+          if (idx >= 0) { _events.splice(idx, 1)[0].cb(); }
         }
       } catch {}
     });
@@ -49,6 +53,14 @@ function send(method, params = {}) {
     _pending.set(id, resolve);
     _ws.send(JSON.stringify({ id, method, params }));
     setTimeout(() => { _pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 10000);
+  });
+}
+
+function waitForEvent(method, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { _events = _events.filter(e => e !== entry); reject(new Error(`Event timeout: ${method}`)); }, timeoutMs);
+    const entry = { method, cb: () => { clearTimeout(timer); resolve(); } };
+    _events.push(entry);
   });
 }
 
@@ -131,7 +143,10 @@ export async function cdpNavigate(url) {
   const conn = await getConnection();
   if (!conn) return false;
   try {
+    await send("Page.enable");
+    const loaded = waitForEvent("Page.loadEventFired", 15000);
     await send("Page.navigate", { url });
+    await loaded;
     return true;
   } catch (e) {
     log(`navigate error: ${e.message}`);
