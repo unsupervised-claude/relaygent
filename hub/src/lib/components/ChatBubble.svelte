@@ -103,6 +103,7 @@
 					updateTabTitle();
 					playChime();
 				}
+			}
 			await tick();
 			if (autoScroll || msg.data.role === 'assistant') scrollBottom();
 		};
