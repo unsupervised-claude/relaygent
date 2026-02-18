@@ -21,6 +21,7 @@
 
 	const MODEL_OPTIONS = [
 		{ id: 'claude-opus-4-6', label: 'Opus 4.6' },
+		{ id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
 		{ id: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5' },
 		{ id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
 	];
@@ -168,8 +169,7 @@
 	.indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
 	.indicator.pulse { background: #22c55e; animation: pulse 2s infinite; }
 	@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-	.badge { font-size: 0.75em; padding: 0.15em 0.5em; border-radius: 10px; background: #fee2e2; color: #dc2626; }
-	.badge.on { background: #dcfce7; color: #16a34a; }
+	.badge { font-size: 0.75em; padding: 0.15em 0.5em; border-radius: 10px; background: #fee2e2; color: #dc2626; }  .badge.on { background: #dcfce7; color: #16a34a; }
 	.hook-ctx { font-size: 0.72em; color: var(--text-muted); padding: 0.3em 1em; background: var(--code-bg); border-radius: 6px; margin-bottom: 0.75em; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.model-picker select { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.2em 0.4em; font-size: 0.78em; cursor: pointer; }
 	.model-picker select:hover { border-color: var(--text-muted); }  .model-picker select:disabled { opacity: 0.5; cursor: wait; }
