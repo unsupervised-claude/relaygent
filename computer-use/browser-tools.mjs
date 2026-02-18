@@ -68,7 +68,7 @@ export function registerBrowserTools(server, IS_LINUX) {
   server.tool("browser_navigate",
     "Navigate browser to a URL via CDP (fast) or keyboard fallback. Auto-returns screenshot.",
     { url: z.string().describe("URL to navigate to"),
-      new_tab: z.boolean().optional().describe("Open in new tab") },
+      new_tab: z.coerce.boolean().optional().describe("Open in new tab") },
     async ({ url, new_tab }) => {
       if (!new_tab && await cdpNavigate(url)) return actionRes(`Navigated to ${url}`, 1500);
       const mod = IS_LINUX ? "ctrl" : "cmd";
@@ -104,7 +104,7 @@ export function registerBrowserTools(server, IS_LINUX) {
     "Type text into a web input via JS injection (avoids address bar capture). Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector for the input"),
       text: z.string().describe("Text to type"),
-      submit: z.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())") },
+      submit: z.coerce.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())") },
     async ({ selector, text, submit }) => {
       const result = await cdpEval(TYPE_EXPR(selector, text, submit));
       if (result === "not found") return jsonRes({ error: `Element not found: ${selector}` });
