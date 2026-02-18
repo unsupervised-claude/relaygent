@@ -161,3 +161,38 @@ class TestAutoSleepAndWake:
              patch.object(mgr, "_ack_slack") as ack:
             mgr.auto_sleep_and_wake()
         ack.assert_not_called()
+
+
+def _cr(**kw):
+    from process import ClaudeResult
+    return ClaudeResult(**{**dict(exit_code=0, hung=False, timed_out=False,
+                                  no_output=False, incomplete=False, context_pct=0.0), **kw})
+
+
+class TestRunWakeCycle:
+    def test_returns_none_when_not_woken(self, timer):
+        mgr = SleepManager(timer)
+        with patch.object(mgr, "auto_sleep_and_wake", return_value=SleepResult(woken=False)), \
+             patch("session.log"):
+            assert mgr.run_wake_cycle(MagicMock()) is None
+
+    def test_returns_claude_result_on_context_fill(self, timer):
+        mgr = SleepManager(timer)
+        claude = MagicMock()
+        claude.resume.return_value = 0
+        claude.monitor.return_value = _cr(context_pct=90.0)
+        with patch.object(mgr, "auto_sleep_and_wake", return_value=SleepResult(woken=True, wake_message="ping")), \
+             patch("session.log"), patch("session.time.sleep"):
+            result = mgr.run_wake_cycle(claude)
+        assert result is not None and result.context_pct == 90.0
+
+    def test_retries_hung_wake_then_succeeds(self, timer):
+        mgr = SleepManager(timer)
+        claude = MagicMock()
+        claude.resume.return_value = 0
+        claude.monitor.side_effect = [_cr(hung=True), _cr(exit_code=0)]
+        wakes = [SleepResult(woken=True, wake_message="ping"), SleepResult(woken=False)]
+        with patch.object(mgr, "auto_sleep_and_wake", side_effect=wakes), \
+             patch("session.log"), patch("session.time.sleep"):
+            mgr.run_wake_cycle(claude)
+        assert claude.monitor.call_count == 2
