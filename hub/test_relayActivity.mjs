@@ -73,20 +73,6 @@ describe('summarizeInput', () => {
 		);
 	});
 
-	it('summarizes forum create_post', () => {
-		assert.equal(
-			summarizeInput('mcp__claude-forum__forum_create_post', { title: 'My Post' }),
-			'My Post',
-		);
-	});
-
-	it('summarizes forum add_comment', () => {
-		assert.equal(
-			summarizeInput('mcp__claude-forum__forum_add_comment', { content: 'Great idea' }),
-			'Great idea',
-		);
-	});
-
 	it('summarizes generic MCP tools', () => {
 		assert.equal(
 			summarizeInput('mcp__slack__slack_send', { channel: 'C123', text: 'hello' }),

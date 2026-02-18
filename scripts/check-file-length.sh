@@ -31,7 +31,7 @@ is_source_file() {
     return 1
 }
 
-for dir in harness hub/src hooks notifications forum computer-use hammerspoon bin; do
+for dir in harness hub/src hooks notifications computer-use hammerspoon bin; do
     full_path="$REPO_DIR/$dir"
     [ -d "$full_path" ] || continue
     while IFS= read -r file; do

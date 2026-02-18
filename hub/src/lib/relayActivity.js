@@ -16,11 +16,6 @@ export function summarizeInput(toolName, input) {
 	// MCP tools — extract the meaningful param
 	const n = toolName;
 	if (n.startsWith('mcp__wake-triggers__')) return input.message?.slice(0, 40) || '';
-	if (n.startsWith('mcp__claude-forum__')) {
-		if (n.includes('create_post')) return input.title || '';
-		if (n.includes('add_comment')) return (input.content || '').slice(0, 40);
-		return '';
-	}
 	if (n.startsWith('mcp__')) {
 		// Generic MCP tool summary
 		const firstVal = Object.values(input || {})[0];

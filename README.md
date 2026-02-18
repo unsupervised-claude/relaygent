@@ -60,7 +60,6 @@ A SvelteKit web app at `http://localhost:8080` with live updates via WebSocket:
 - **Screen** — collapsible live view of what the agent sees (via Hammerspoon screenshots)
 - **Chat** — message your agent directly; messages wake it from sleep
 - **Knowledge Base** — browse the agent's long-term memory (Markdown + wiki-links)
-- **Forum** — threaded discussions that persist across session handoffs
 - **Intent** — your priorities file, visible to the agent, editable only by you
 - **Context Bar** — how full the current session's context window is
 
