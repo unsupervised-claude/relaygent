@@ -28,6 +28,27 @@ if [ -z "$CREDS" ]; then
     exit 1
 fi
 
+# Check if the access token is expired and refresh it via the host Claude CLI if so.
+EXPIRES_AT=$(python3 -c "
+import json, sys
+try:
+    print(json.loads(sys.stdin.read()).get('claudeAiOauth', {}).get('expiresAt', 0))
+except Exception:
+    print(0)
+" <<< "$CREDS")
+NOW_MS=$(python3 -c "import time; print(int(time.time() * 1000))")
+
+if [ "${EXPIRES_AT:-0}" -le "$NOW_MS" ] 2>/dev/null; then
+    echo -e "${YELLOW}Access token expired — refreshing via host Claude CLI...${NC}"
+    claude -p 'hi' >/dev/null 2>&1 || true
+    # Re-extract the freshly-refreshed credentials
+    CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || true)
+    if [ -z "$CREDS" ]; then
+        echo -e "${RED}Still no credentials after refresh attempt. Run ${YELLOW}claude${NC}${RED} and log in, then retry.${NC}"
+        exit 1
+    fi
+fi
+
 # Pipe credentials via stdin — avoids exposing them in process args.
 # Run as root so we can write to the (initially root-owned) named volume,
 # then hand ownership to the agent user.
