@@ -48,7 +48,8 @@ export function summarizeResult(content) {
 function getRunsPrefix() {
 	try {
 		const cfg = JSON.parse(fs.readFileSync(path.join(process.env.HOME, '.relaygent', 'config.json'), 'utf-8'));
-		return path.join(cfg.paths.repo, 'harness', 'runs').replace(/\//g, '-');
+		// Claude CLI replaces both '/' and '.' with '-' in project slugs
+		return path.join(cfg.paths.repo, 'harness', 'runs').replace(/[/.]/g, '-');
 	} catch { return null; }
 }
 
