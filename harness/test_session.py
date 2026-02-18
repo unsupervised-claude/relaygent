@@ -131,6 +131,16 @@ class TestWaitForWake:
             woken, notifs = mgr._wait_for_wake()
         assert woken and notifs[0]["type"] == "system"
 
+    def test_force_wake_on_missing_cache(self, timer, cache_file, monkeypatch):
+        # Cache file doesn't exist; after MAX_CACHE_STALE seconds should force-wake
+        mgr = SleepManager(timer)
+        monkeypatch.setattr("session.NOTIFICATIONS_CACHE", str(cache_file) + ".gone")
+        mgr._cache_missing_since = time.time() - MAX_CACHE_STALE - 1
+        with patch("session.set_status"), patch("session.log"), \
+             patch("session.time.sleep"):
+            woken, notifs = mgr._wait_for_wake()
+        assert woken and notifs[0]["type"] == "system"
+
 
 class TestAutoSleepAndWake:
     def test_returns_not_woken_if_expired(self, timer):
