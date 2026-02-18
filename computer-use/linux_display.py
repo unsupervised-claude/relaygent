@@ -144,6 +144,8 @@ _CHROME_ARGS = [
     "--disable-default-apps", "--disable-sync",
     "--disable-background-networking", "--disable-component-update",
     "--disable-session-crashed-bubble", "--disable-infobars",
+    "--remote-debugging-port=9223", "--remote-allow-origins=*",
+    "--user-data-dir=/root/.config/chrome-debug-profile",
 ]
 
 

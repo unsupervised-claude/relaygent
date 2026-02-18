@@ -7,6 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { platform } from "node:os";
 import { hsCall, takeScreenshot, readScreenshot, runOsascript, findElements, clickElement, checkHealth, SCREENSHOT_PATH } from "./hammerspoon.mjs";
+import { registerBrowserTools } from "./browser-tools.mjs";
 const IS_LINUX = platform() === "linux";
 
 const server = new McpServer({ name: "computer-use", version: "1.0.0" });
@@ -151,22 +152,7 @@ server.tool("click_element", "Find UI element by title/role and click it. Auto-r
 	}
 );
 
-server.tool("browser_navigate", "Navigate browser to a URL. Auto-returns screenshot.",
-	{ url: z.string().describe("URL to navigate to"),
-		new_tab: z.boolean().optional().describe("Open in new tab") },
-	async ({ url, new_tab }) => {
-		const mod = IS_LINUX ? "ctrl" : "cmd";
-		const browser = IS_LINUX ? "google-chrome" : "Google Chrome";
-		await hsCall("POST", "/launch", { app: browser });
-		await new Promise(r => setTimeout(r, 300));
-		await hsCall("POST", "/type", { key: new_tab ? "t" : "l", modifiers: [mod] });
-		await new Promise(r => setTimeout(r, 200));
-		await hsCall("POST", "/type", { text: url });
-		await new Promise(r => setTimeout(r, 100));
-		await hsCall("POST", "/type", { key: "return" });
-		return actionRes(`Navigated to ${url}`, 1500);
-	}
-);
+registerBrowserTools(server, IS_LINUX);
 
 server.tool("applescript", "Run AppleScript via osascript.",
 	{ code: z.string().describe("AppleScript code") },
