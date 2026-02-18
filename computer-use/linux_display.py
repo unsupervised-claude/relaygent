@@ -150,6 +150,21 @@ _CHROME_ARGS = [
 ]
 
 
+def _patch_chrome_prefs() -> None:
+    """Set exit_type=Normal so Chrome doesn't show 'Restore pages?' bubble."""
+    import json as _json
+    pref = "/tmp/chrome-debug-profile/Default/Preferences"
+    try:
+        with open(pref) as f:
+            data = _json.load(f)
+        data.setdefault("profile", {})["exit_type"] = "Normal"
+        data["profile"]["exited_cleanly"] = True
+        with open(pref, "w") as f:
+            _json.dump(data, f)
+    except (FileNotFoundError, ValueError, OSError):
+        pass
+
+
 def launch(params: dict) -> tuple[dict, int]:
     app = params.get("app")
     if not app:
@@ -161,6 +176,8 @@ def launch(params: dict) -> tuple[dict, int]:
     for name in dict.fromkeys(candidates):  # dedup preserving order
         try:
             extra = _CHROME_ARGS if name in _CHROME_NAMES else []
+            if name in _CHROME_NAMES:
+                _patch_chrome_prefs()
             subprocess.Popen([name] + extra, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
             return {"launched": name}, 200
