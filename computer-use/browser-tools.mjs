@@ -56,6 +56,21 @@ const TYPE_EXPR = (sel, text, submit) =>
   `var f=el.closest('form');if(f)f.submit();` : ``) +
   `return el.value})()`;
 
+// Keystroke mode: types char-by-char with full key events (for autocomplete/typeahead inputs)
+const TYPE_SLOW_EXPR = (sel, text, submit) =>
+  `(function(){${_deep}var el=_dq(${JSON.stringify(sel)});` +
+  `if(!el)return Promise.resolve('not found');el.focus();el.value='';` +
+  `var t=${JSON.stringify(text)};` +
+  `return new Promise(function(res){var i=0;(function next(){if(i>=t.length){` +
+  (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));` +
+  `var f=el.closest('form');if(f)f.submit();` : ``) +
+  `return res(el.value)}var c=t[i++];el.value+=c;` +
+  `el.dispatchEvent(new KeyboardEvent('keydown',{key:c,bubbles:true}));` +
+  `el.dispatchEvent(new KeyboardEvent('keypress',{key:c,bubbles:true}));` +
+  `el.dispatchEvent(new Event('input',{bubbles:true}));` +
+  `el.dispatchEvent(new KeyboardEvent('keyup',{key:c,bubbles:true}));` +
+  `setTimeout(next,20)})()})})()`;
+
 const WAIT_EXPR = (sel, timeoutMs) =>
   `(function(){${_deep}return new Promise(function(res,rej){` +
   `var t=Date.now(),limit=${timeoutMs};` +
@@ -104,11 +119,13 @@ export function registerBrowserTools(server, IS_LINUX) {
     "Type text into a web input via JS injection (avoids address bar capture). Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector for the input"),
       text: z.string().describe("Text to type"),
-      submit: z.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())") },
-    async ({ selector, text, submit }) => {
-      const result = await cdpEval(TYPE_EXPR(selector, text, submit));
+      submit: z.boolean().optional().describe("Submit form after typing (dispatches Enter + form.submit())"),
+      slow: z.boolean().optional().describe("Type char-by-char with key events (for autocomplete/typeahead inputs)") },
+    async ({ selector, text, submit, slow }) => {
+      const expr = slow ? TYPE_SLOW_EXPR(selector, text, submit) : TYPE_EXPR(selector, text, submit);
+      const result = slow ? await cdpEvalAsync(expr) : await cdpEval(expr);
       if (result === "not found") return jsonRes({ error: `Element not found: ${selector}` });
-      return actionRes(`Typed into ${selector}: "${text}"${submit ? " (submitted)" : ""}`, submit ? 1500 : 400);
+      return actionRes(`Typed into ${selector}: "${text}"${slow ? " (slow)" : ""}${submit ? " (submitted)" : ""}`, submit ? 1500 : 400);
     }
   );
 
