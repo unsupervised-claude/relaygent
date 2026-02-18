@@ -14,12 +14,28 @@ const COORD_EXPR = (sel) =>
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
 
+const CLICK_EXPR = (sel) =>
+  `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
+  `if(!el)return null;el.click();var r=el.getBoundingClientRect();` +
+  `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
+  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
+
 const TEXT_COORD_EXPR = (text, idx) =>
   `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
   `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
   `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `var r=el.getBoundingClientRect();` +
+  `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
+  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight)),` +
+  `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
+
+const TEXT_CLICK_EXPR = (text, idx) =>
+  `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
+  `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
+  `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
+  `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
+  `el.click();var r=el.getBoundingClientRect();` +
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight)),` +
   `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
@@ -89,11 +105,10 @@ export function registerBrowserTools(server, IS_LINUX) {
     "Click a web element by CSS selector — finds coords and clicks via CDP in one step. Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector (e.g. 'button[type=submit]', 'a.nav-link', '#login')") },
     async ({ selector }) => {
-      const raw = await cdpEval(COORD_EXPR(selector));
+      const raw = await cdpEval(CLICK_EXPR(selector));
       if (!raw) return jsonRes({ error: `Element not found: ${selector}` });
       let coords;
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
-      await cdpClick(coords.sx, coords.sy);
       return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 400);
     }
   );
@@ -103,12 +118,11 @@ export function registerBrowserTools(server, IS_LINUX) {
     { text: z.string().describe("Text to search for (case-insensitive contains match)"),
       index: z.coerce.number().optional().describe("Which match to click if multiple (default: 0)") },
     async ({ text, index = 0 }) => {
-      const raw = await cdpEval(TEXT_COORD_EXPR(text, index));
+      const raw = await cdpEval(TEXT_CLICK_EXPR(text, index));
       if (!raw) return jsonRes({ error: `No elements found containing: ${text}` });
       let coords;
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
       if (coords.error) return jsonRes(coords);
-      await cdpClick(coords.sx, coords.sy);
       return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 400);
     }
   );
