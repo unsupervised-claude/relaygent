@@ -101,11 +101,21 @@ class TestFormatNotifications:
 
 class TestFormatChatSlack:
     def test_slack_notification_format(self):
-        notifs = [{"source": "slack", "count": 3, "channels": [{"name": "general"}]}]
+        notifs = [{"source": "slack", "count": 3,
+                   "channels": [{"name": "general", "unread": 3}]}]
         result = format_chat(notifs)
         assert len(result) == 1
-        assert "3" in result[0]
         assert "general" in result[0]
+        assert "3" in result[0]  # unread count shown in fallback
+
+    def test_slack_includes_message_content(self):
+        """Message text should appear in wake notification."""
+        notifs = [{"source": "slack", "count": 1,
+                   "channels": [{"name": "general", "unread": 1,
+                                 "messages": [{"user": "U123", "text": "hello world", "ts": "1"}]}]}]
+        result = format_chat(notifs)
+        assert "hello world" in result[0]
+        assert "U123" in result[0]
 
     def test_slack_multiple_channels(self):
         notifs = [{"source": "slack", "count": 5,

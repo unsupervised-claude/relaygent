@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+def _format_slack_channel(ch: dict) -> str:
+    """Format a single Slack channel with its message previews."""
+    name = ch.get("name", ch.get("id", "?"))
+    lines = [f"#{name}:"]
+    for m in ch.get("messages", []):
+        user = m.get("user", "?")
+        text = m.get("text", "").strip()
+        if text:
+            lines.append(f"  <@{user}>: {text}")
+    if not ch.get("messages"):
+        lines.append(f"  ({ch.get('unread', 0)} new message(s))")
+    return "\n".join(lines)
+
+
 def format_chat(notifs: list) -> list[str]:
     """Format chat and Slack notification messages."""
     parts = []
     for msg in notifs:
         source = msg.get("source", "chat")
         if source == "slack":
-            count = msg.get("count", 0)
             channels = msg.get("channels", [])
-            ch_info = ", ".join(c.get("name", c.get("id", "?")) for c in channels)
-            parts.append(f"New Slack message(s) ({count}) in: {ch_info}. Check your Slack DMs.")
+            ch_parts = [_format_slack_channel(c) for c in channels]
+            parts.append("New Slack messages:\n" + "\n\n".join(ch_parts))
         elif msg.get("messages"):
             lines = [m.get("content", "") for m in msg["messages"]]
             parts.append("\n".join(lines))

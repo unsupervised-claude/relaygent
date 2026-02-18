@@ -118,10 +118,16 @@ def collect(notifications):
                 if m.get("subtype") not in skip_subtypes
                 and m.get("user") != self_uid]
         if msgs and msgs[0].get("ts", "0") > last_ts:
+            # Include message previews (newest-first → reverse for chronological)
+            previews = [
+                {"user": m.get("user", ""), "text": m.get("text", ""), "ts": m.get("ts", "")}
+                for m in reversed(msgs[:5])
+            ]
             unread_channels.append({
                 "id": ch["id"],
                 "name": ch.get("name", ch["id"]),
                 "unread": len(msgs),
+                "messages": previews,
             })
 
     if unread_channels:
