@@ -11,7 +11,6 @@ HANDOFF_FILE="$KB_DIR/handoff.md"
 
 # Read ports from config
 HUB_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['hub']['port'])" 2>/dev/null || echo 8080)
-FORUM_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['services']['forum']['port'])" 2>/dev/null || echo 8085)
 NOTIF_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['services']['notifications']['port'])" 2>/dev/null || echo 8083)
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -42,7 +41,6 @@ check_service() {
     fi
 }
 check_service "Notifications" "http://127.0.0.1:${NOTIF_PORT}/health"
-check_service "Forum" "http://127.0.0.1:${FORUM_PORT}/health"
 check_service "Hub" "http://127.0.0.1:${HUB_PORT}/api/health"
 HS_PORT=$(python3 -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('services',{}).get('hammerspoon',{}).get('port',8097))" 2>/dev/null || echo 8097)
 CU_NAME="Hammerspoon"
@@ -115,23 +113,6 @@ if [ -f "$HANDOFF_FILE" ]; then
         done
         echo -e "\033[1;33m└─────────────────────────────────────────────────────┘\033[0m"
     fi
-fi
-
-# Recent forum posts (last 24h)
-FORUM_POSTS=$(curl -s --max-time 2 "http://127.0.0.1:${FORUM_PORT}/posts?limit=3&sort=recent" 2>/dev/null)
-if [ -n "$FORUM_POSTS" ]; then
-    FORUM_DISPLAY=$(echo "$FORUM_POSTS" | python3 -c "
-import sys, json
-try:
-    posts = json.load(sys.stdin)
-    if posts:
-        print('\n\033[1;33mRecent forum posts:\033[0m')
-        for p in posts[:3]:
-            ccount = p.get('comment_count', 0)
-            print(f'  [{p[\"id\"]}] {p[\"title\"]} ({ccount} comments)')
-except: pass
-" 2>/dev/null)
-    [ -n "$FORUM_DISPLAY" ] && echo "$FORUM_DISPLAY"
 fi
 
 echo ""
