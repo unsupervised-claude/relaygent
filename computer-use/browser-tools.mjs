@@ -14,6 +14,16 @@ const COORD_EXPR = (sel) =>
   `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
   `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})})()`;
 
+const TEXT_COORD_EXPR = (text, idx) =>
+  `(function(){var t=${JSON.stringify(text.toLowerCase())},i=${idx};` +
+  `var els=Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button],[role=button]'));` +
+  `var matches=els.filter(e=>e.offsetParent!==null&&(e.innerText||e.value||'').toLowerCase().includes(t));` +
+  `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
+  `var r=el.getBoundingClientRect();` +
+  `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
+  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight)),` +
+  `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
+
 const TYPE_EXPR = (sel, text) =>
   `(function(){var el=document.querySelector(${JSON.stringify(sel)});` +
   `if(!el)return 'not found';el.focus();el.value=${JSON.stringify(text)};` +
@@ -77,6 +87,21 @@ export function registerBrowserTools(server, IS_LINUX) {
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
       await cdpClick(coords.sx, coords.sy);
       return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 400);
+    }
+  );
+
+  server.tool("browser_click_text",
+    "Click a visible element by its text content (links, buttons). Safer than browser_click when multiple elements share a selector. Auto-returns screenshot.",
+    { text: z.string().describe("Text to search for (case-insensitive contains match)"),
+      index: z.coerce.number().optional().describe("Which match to click if multiple (default: 0)") },
+    async ({ text, index = 0 }) => {
+      const raw = await cdpEval(TEXT_COORD_EXPR(text, index));
+      if (!raw) return jsonRes({ error: `No elements found containing: ${text}` });
+      let coords;
+      try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
+      if (coords.error) return jsonRes(coords);
+      await cdpClick(coords.sx, coords.sy);
+      return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 400);
     }
   );
 }
