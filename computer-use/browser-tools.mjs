@@ -30,6 +30,14 @@ const TYPE_EXPR = (sel, text) =>
   `el.dispatchEvent(new Event('input',{bubbles:true}));` +
   `el.dispatchEvent(new Event('change',{bubbles:true}));return el.value})()`;
 
+const WAIT_EXPR = (sel, timeoutMs) =>
+  `(function(){return new Promise((res,rej)=>{` +
+  `var t=Date.now(),limit=${timeoutMs};` +
+  `(function poll(){var el=document.querySelector(${JSON.stringify(sel)});` +
+  `if(el&&el.offsetParent!==null)return res('found');` +
+  `if(Date.now()-t>limit)return rej('timeout');` +
+  `setTimeout(poll,100)})()})})()`;
+
 export function registerBrowserTools(server, IS_LINUX) {
   server.tool("browser_navigate",
     "Navigate browser to a URL via CDP (fast) or keyboard fallback. Auto-returns screenshot.",
@@ -102,6 +110,35 @@ export function registerBrowserTools(server, IS_LINUX) {
       if (coords.error) return jsonRes(coords);
       await cdpClick(coords.sx, coords.sy);
       return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 400);
+    }
+  );
+
+  server.tool("browser_scroll",
+    "Scroll within the web page by pixels (not screen scroll). Use for long pages. Auto-returns screenshot.",
+    { x: z.coerce.number().optional().describe("Horizontal scroll pixels (default: 0)"),
+      y: z.coerce.number().optional().describe("Vertical scroll pixels (default: 300, negative = up)"),
+      selector: z.string().optional().describe("Scroll inside this element (default: window)") },
+    async ({ x = 0, y = 300, selector }) => {
+      const expr = selector
+        ? `(function(){var el=document.querySelector(${JSON.stringify(selector)});if(el)el.scrollBy(${x},${y});return !!el})()`
+        : `window.scrollBy(${x},${y});true`;
+      await cdpEval(expr);
+      return actionRes(`Scrolled (${x},${y})${selector ? ` in ${selector}` : ""}`, 300);
+    }
+  );
+
+  server.tool("browser_wait",
+    "Wait for a CSS selector to appear in the page (polls up to timeout). Returns 'found' or 'timeout'.",
+    { selector: z.string().describe("CSS selector to wait for"),
+      timeout: z.coerce.number().optional().describe("Max wait ms (default: 5000)") },
+    async ({ selector, timeout = 5000 }) => {
+      const expr = WAIT_EXPR(selector, timeout);
+      try {
+        const result = await cdpEval(expr);
+        return jsonRes({ status: result ?? "timeout", selector });
+      } catch {
+        return jsonRes({ status: "timeout", selector });
+      }
     }
   );
 }
