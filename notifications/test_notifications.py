@@ -174,7 +174,8 @@ class TestNotificationsEndpoint:
         reminders = [n for n in data if n["type"] == "reminder"]
         assert len(reminders) >= 1
 
-    def test_pending_fast_empty(self, client):
+    def test_pending_fast_empty(self, client, monkeypatch):
+        monkeypatch.setattr(routes_mod, "_collect_chat_messages", lambda n: None)
         resp = client.get("/notifications/pending?fast=1")
         assert resp.get_json() == []
 
