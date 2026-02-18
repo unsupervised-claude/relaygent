@@ -96,6 +96,24 @@ export async function cdpClick(x, y) {
   }
 }
 
+/**
+ * Like cdpEval but waits for Promises to resolve (awaitPromise: true).
+ * Required for expressions that return a Promise (e.g. polling loops).
+ * Note: CDP send has a 10s hard timeout — keep polling expressions under that.
+ */
+export async function cdpEvalAsync(expression) {
+  const conn = await getConnection();
+  if (!conn) return null;
+  try {
+    const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+    return result?.result?.result?.value ?? null;
+  } catch (e) {
+    log(`evalAsync error: ${e.message}`);
+    _ws = null;
+    return null;
+  }
+}
+
 export async function cdpEval(expression) {
   const conn = await getConnection();
   if (!conn) return null;
