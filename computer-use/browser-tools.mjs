@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 import { hsCall, takeScreenshot } from "./hammerspoon.mjs";
-import { cdpEval, cdpNavigate, cdpClick } from "./cdp.mjs";
+import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick } from "./cdp.mjs";
 
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
@@ -130,11 +130,12 @@ export function registerBrowserTools(server, IS_LINUX) {
   server.tool("browser_wait",
     "Wait for a CSS selector to appear in the page (polls up to timeout). Returns 'found' or 'timeout'.",
     { selector: z.string().describe("CSS selector to wait for"),
-      timeout: z.coerce.number().optional().describe("Max wait ms (default: 5000)") },
+      timeout: z.coerce.number().optional().describe("Max wait ms, max 8000 (default: 5000)") },
     async ({ selector, timeout = 5000 }) => {
-      const expr = WAIT_EXPR(selector, timeout);
+      const capped = Math.min(timeout, 8000);
+      const expr = WAIT_EXPR(selector, capped);
       try {
-        const result = await cdpEval(expr);
+        const result = await cdpEvalAsync(expr);
         return jsonRes({ status: result ?? "timeout", selector });
       } catch {
         return jsonRes({ status: "timeout", selector });
