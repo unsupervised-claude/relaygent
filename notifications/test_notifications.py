@@ -13,7 +13,7 @@ os.environ.setdefault("RELAYGENT_DATA_DIR", "/tmp/relaygent-test-notif")
 import pytest
 
 # Import all modules upfront so routes are registered before any requests
-import config  # noqa: E402
+import notif_config as config  # noqa: E402
 import db as notif_db  # noqa: E402
 import reminders as rem_mod  # noqa: E402
 import routes as routes_mod  # noqa: E402

@@ -6,7 +6,7 @@ import os
 import urllib.request
 from datetime import datetime, timedelta
 
-from config import app
+from notif_config import app
 from db import get_db
 from flask import jsonify, request
 from reminders import is_recurring_reminder_due

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from config import CRONITER_AVAILABLE, app
+from notif_config import CRONITER_AVAILABLE, app
 from db import get_db
 from flask import jsonify, request
 

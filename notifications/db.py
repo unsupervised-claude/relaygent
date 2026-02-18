@@ -4,7 +4,7 @@ import contextlib
 import os
 import sqlite3
 
-from config import DB_PATH
+from notif_config import DB_PATH
 
 
 @contextlib.contextmanager

@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from config import app
+from notif_config import app
 from flask import jsonify
 
 logger = logging.getLogger(__name__)

@@ -8,7 +8,7 @@ import os
 
 import reminders  # noqa: F401 — /pending, /upcoming, /reminder routes
 import routes  # noqa: F401 — /notifications/pending, /health routes
-from config import app
+from notif_config import app
 from db import init_db
 
 if __name__ == "__main__":
