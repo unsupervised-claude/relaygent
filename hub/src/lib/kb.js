@@ -5,9 +5,13 @@ import matter from 'gray-matter';
 import { marked } from 'marked';
 import { sanitizeHtml } from './sanitize.js';
 
+// Resolve repo root from cwd (hub dir when started normally) or from source __dirname.
+// __dirname inside the build resolves into build/server/chunks, so cwd is more reliable.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_DIR = path.join(__dirname, '..', '..', '..');
-const KB_DIR = process.env.RELAYGENT_KB_DIR || path.join(REPO_DIR, 'knowledge', 'topics');
+const HUB_DIR = path.resolve(process.cwd()).endsWith('hub')
+	? process.cwd()
+	: path.join(__dirname, '..', '..');
+const KB_DIR = process.env.RELAYGENT_KB_DIR || path.join(HUB_DIR, '..', 'knowledge', 'topics');
 
 /** Get the KB directory path (for use by other modules) */
 export function getKbDir() { return KB_DIR; }
