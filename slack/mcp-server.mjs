@@ -154,12 +154,9 @@ server.tool("search_messages",
 	}
 );
 
-server.tool("unread",
-	"Check channels with unread messages.",
-	{},
+server.tool("unread", "Check channels with unread messages.", {},
 	async () => {
 		try {
-			// Try Socket Mode cache first (zero API calls)
 			if (existsSync(SOCKET_CACHE)) {
 				let ackTs = 0;
 				try { ackTs = parseFloat(readFileSync(LAST_ACK, "utf-8").trim()) || 0; } catch {}
@@ -172,38 +169,28 @@ server.tool("unread",
 						if (!byCh[ch]) byCh[ch] = { name: m.channel_name || ch, count: 0 };
 						byCh[ch].count++;
 					}
-					const lines = Object.values(byCh).map(c => `${c.name}: ${c.count} unread`);
-					return txt(lines.join("\n"));
+					return txt(Object.values(byCh).map(c => `${c.name}: ${c.count} unread`).join("\n"));
 				}
 				return txt("No unread messages.");
 			}
-			// Fallback: API call (single conversations.list, no per-channel info)
 			const data = await slackApi("conversations.list", {
-				limit: 100, types: "public_channel,private_channel,mpim,im",
-				exclude_archived: true,
+				limit: 100, types: "public_channel,private_channel,mpim,im", exclude_archived: true,
 			});
-			const channels = data.channels || [];
-			if (!channels.length) return txt("No channels found.");
-			// Only check channels that are likely active (have recent messages)
-			const BATCH = 3;
+			const chs = (data.channels || []).slice(0, 15);
+			if (!chs.length) return txt("No channels found.");
 			const unread = [];
-			for (let i = 0; i < Math.min(channels.length, 15); i += BATCH) {
-				const batch = channels.slice(i, i + BATCH);
-				const results = await Promise.all(batch.map(async c => {
+			for (let i = 0; i < chs.length; i += 3) {
+				const res = await Promise.all(chs.slice(i, i + 3).map(async c => {
 					try {
 						const info = await slackApi("conversations.info", { channel: c.id });
-						const ch = info.channel;
-						if (ch.unread_count_display > 0) {
-							const label = await dmName(ch);
-							return `${label}: ${ch.unread_count_display} unread`;
-						}
+						if (info.channel.unread_count_display > 0)
+							return `${await dmName(info.channel)}: ${info.channel.unread_count_display} unread`;
 					} catch {}
 					return null;
 				}));
-				unread.push(...results.filter(Boolean));
+				unread.push(...res.filter(Boolean));
 			}
-			if (!unread.length) return txt("No unread messages.");
-			return txt(unread.join("\n"));
+			return txt(unread.length ? unread.join("\n") : "No unread messages.");
 		} catch (e) { return txt(`Slack unread error: ${e.message}`); }
 	}
 );
