@@ -94,7 +94,17 @@ do_start() {
         echo -e "\n  ${RED}Fix port conflicts above, then try again.${NC}"; exit 1
     fi
     # Computer-use backend
-    if [ "$(uname)" = "Darwin" ]; then
+    local is_android=false
+    [ -n "${ANDROID_DATA:-}" ] || grep -q "Android" /proc/version 2>/dev/null && is_android=true
+    if [ "$is_android" = true ]; then
+        check_port "$HS_PORT" "Computer-use" || port_ok=false
+        if [ "$port_ok" = true ]; then
+            start_service "Computer-use (port $HS_PORT)" "computer-use" \
+                env ANDROID_COMPUTER_USE=1 \
+                node --require "$SCRIPT_DIR/computer-use/dns-patch.cjs" \
+                "$SCRIPT_DIR/computer-use/mcp-server.mjs" --http "$HS_PORT"
+        fi
+    elif [ "$(uname)" = "Darwin" ]; then
         if ! pgrep -x Hammerspoon >/dev/null 2>&1; then
             if command -v open &>/dev/null && open -Ra Hammerspoon 2>/dev/null; then
                 open -a Hammerspoon
@@ -121,7 +131,6 @@ do_start() {
             if [ "$port_ok" = true ]; then
                 start_service "Computer-use (port $HS_PORT)" "computer-use" \
                     env DISPLAY="${DISPLAY:-:0}" python3 "$SCRIPT_DIR/computer-use/linux-server.py"
-                # Verify server started
                 sleep 0.5
                 if ! curl -sf "http://localhost:$HS_PORT/health" >/dev/null 2>&1; then
                     echo -e "    ${YELLOW}Warning: server started but /health not responding${NC}"

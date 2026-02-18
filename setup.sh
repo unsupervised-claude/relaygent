@@ -14,12 +14,18 @@ echo -e "${CYAN}  Relaygent — Persistent AI Agent Setup${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# Detect Android/Termux
+IS_ANDROID=false
+[ -n "${ANDROID_DATA:-}" ] || grep -q "Android" /proc/version 2>/dev/null && IS_ANDROID=true
+
 # Check Node.js
 if ! command -v node &>/dev/null; then
     echo -e "${RED}Node.js is required but not installed.${NC}"
     echo ""
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "Install via Homebrew:  brew install node"
+    elif [ "$IS_ANDROID" = true ]; then
+        echo "Install via Termux:  pkg install nodejs"
     else
         echo "Install via:  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs"
     fi

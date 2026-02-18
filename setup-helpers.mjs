@@ -15,6 +15,10 @@ export async function setupSecrets(REPO_DIR, C) {
 }
 
 export function setupHammerspoon(config, REPO_DIR, HOME, C, ask) {
+	if (process.env.ANDROID_DATA || process.env.ANDROID_COMPUTER_USE) {
+		console.log(`  Computer-use: ${C.yellow}Android detected${C.reset} — uses ADB backend (started automatically by relaygent start)`);
+		return;
+	}
 	if (process.platform !== 'darwin') {
 		console.log(`  Computer-use: ${C.yellow}Linux detected${C.reset} — uses python linux-server.py (started automatically)`);
 		console.log(`  ${C.dim}Debian/Ubuntu: sudo apt install xdotool scrot wmctrl imagemagick at-spi2-core python3-pyatspi gir1.2-atspi-2.0${C.reset}`);
