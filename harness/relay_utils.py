@@ -104,3 +104,21 @@ def cleanup_context_file() -> None:
     pct_file = Path("/tmp/relaygent-context-pct")
     if pct_file.exists():
         pct_file.unlink()
+
+
+def pull_latest() -> None:
+    """Pull latest code from origin/main. Best-effort, never blocks startup."""
+    try:
+        result = subprocess.run(
+            ["git", "pull", "--ff-only", "origin", "main"],
+            cwd=str(REPO_DIR), capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            if "Already up to date" not in output:
+                log(f"Pulled latest: {output.splitlines()[-1]}")
+            else:
+                log("Code up to date")
+        else:
+            log(f"Git pull failed: {result.stderr.strip()[:100]}")
+    except (subprocess.SubprocessError, OSError) as e:
+        log(f"Git pull error: {e}")

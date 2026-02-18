@@ -1,20 +1,12 @@
 """Tests for sleep/wake handling (session.py)."""
-
 from __future__ import annotations
-
-import json
-import os
-import sys
-import time
+import json, os, sys, time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-
 from session import SleepManager, SleepResult, MAX_CACHE_STALE
-
 
 @pytest.fixture
 def timer():

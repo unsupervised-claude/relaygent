@@ -15,7 +15,7 @@ from config import (CONTEXT_THRESHOLD, HANG_CHECK_DELAY, INCOMPLETE_BASE_DELAY,
                      cleanup_old_workspaces, get_workspace_dir, log, set_status)
 from jsonl_checks import should_sleep
 from process import ClaudeProcess
-from relay_utils import acquire_lock, cleanup_context_file, commit_kb, kill_orphaned_claudes, notify_crash, rotate_log
+from relay_utils import acquire_lock, cleanup_context_file, commit_kb, kill_orphaned_claudes, notify_crash, pull_latest, rotate_log
 from session import SleepManager
 
 
@@ -164,6 +164,7 @@ class RelayRunner:
 def main() -> int:
     lock_fd = acquire_lock()  # Must keep fd open or lock releases
     kill_orphaned_claudes()
+    pull_latest()
     try:
         return RelayRunner().run()
     finally:
