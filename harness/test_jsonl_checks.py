@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from jsonl_checks import (
     _read_tail,
     check_incomplete_exit,
+    find_jsonl_path,
     get_jsonl_size,
-    should_sleep,
 )
 
 
@@ -58,11 +58,9 @@ class TestReadTail:
 
     def test_skips_partial_first_line_on_seek(self, tmp_path):
         f = tmp_path / "big.jsonl"
-        # Write enough data that seeking skips the first line
         lines = [json.dumps({"i": i, "pad": "x" * 100}) for i in range(1000)]
         f.write_text("\n".join(lines) + "\n")
         result = _read_tail(f, bytes_count=512)
-        # All returned lines should be valid JSON
         for line in result:
             parsed = json.loads(line)
             assert "i" in parsed
@@ -78,6 +76,26 @@ class TestReadTail:
     def test_nonexistent_file(self, tmp_path):
         f = tmp_path / "missing.jsonl"
         assert _read_tail(f) == []
+
+
+# --- find_jsonl_path ---
+
+
+class TestFindJsonlPath:
+    def test_path_with_dots(self, tmp_path):
+        """Workspace paths with dots must slug correctly (dots → dashes)."""
+        session_id = "test-session-dots"
+        workspace = tmp_path / "user.name" / "my.project"
+        workspace.mkdir(parents=True)
+        slug = str(workspace).replace("/", "-").replace(".", "-")
+        project_dir = tmp_path / ".claude" / "projects" / slug
+        project_dir.mkdir(parents=True)
+        jsonl_path = project_dir / f"{session_id}.jsonl"
+        jsonl_path.write_text('{"type": "assistant"}\n')
+
+        with patch("jsonl_checks.Path.home", return_value=tmp_path):
+            result = find_jsonl_path(session_id, workspace)
+        assert result == jsonl_path
 
 
 # --- get_jsonl_size ---
@@ -144,51 +162,4 @@ class TestCheckIncompleteExit:
         sid, ws, path, write = tmp_jsonl
         path.write_text("not valid json\n")
         incomplete, tool = check_incomplete_exit(sid, ws)
-        assert not incomplete  # Gracefully handles parse errors
-
-
-# --- should_sleep ---
-
-
-class TestShouldSleep:
-    def test_sleeps_after_text_output(self, tmp_jsonl):
-        sid, ws, path, write = tmp_jsonl
-        write([
-            {"type": "assistant", "message": {"content": [
-                {"type": "text", "text": "All done, going to sleep."}
-            ]}},
-        ])
-        assert should_sleep(sid, ws) is True
-
-    def test_no_sleep_if_last_is_tool_result(self, tmp_jsonl):
-        sid, ws, path, write = tmp_jsonl
-        write([
-            {"type": "user", "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "tu_xyz"}
-            ]}},
-        ])
-        assert should_sleep(sid, ws) is False
-
-    def test_no_sleep_if_only_tool_use(self, tmp_jsonl):
-        sid, ws, path, write = tmp_jsonl
-        write([
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "tu_1", "name": "Read", "input": {}}
-            ]}},
-        ])
-        assert should_sleep(sid, ws) is False
-
-    def test_no_sleep_if_no_file(self, tmp_jsonl):
-        sid, ws, path, write = tmp_jsonl
-        assert should_sleep("missing-session", ws) is False
-
-    def test_sleeps_with_mixed_content(self, tmp_jsonl):
-        """If last assistant has both tool_use and text, should sleep."""
-        sid, ws, path, write = tmp_jsonl
-        write([
-            {"type": "assistant", "message": {"content": [
-                {"type": "tool_use", "id": "tu_1", "name": "Bash", "input": {}},
-                {"type": "text", "text": "Done with that task."},
-            ]}},
-        ])
-        assert should_sleep(sid, ws) is True
+        assert not incomplete
