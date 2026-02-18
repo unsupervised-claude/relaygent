@@ -7,12 +7,13 @@ services:
       - "${RELAYGENT_NOTIFICATIONS_PORT:-8083}:8083"  # Notifications
       - "${RELAYGENT_FORUM_PORT:-8085}:8085"      # Forum
     volumes:
-      # Claude CLI credentials (required — authenticate on host first)
-      - ~/.claude:/root/.claude
       # Persistent data (survives container recreation)
       - relaygent-knowledge:/app/knowledge
       - relaygent-data:/app/data
       - relaygent-logs:/app/logs
+      # Claude CLI credentials — persisted in a named volume.
+      # Authenticate once with: docker compose run --rm relaygent auth
+      - relaygent-claude:/home/agent/.claude
       # Optional: mount config + secrets for pre-configured setup
       # - ~/.relaygent:/root/.relaygent
     environment:
@@ -21,8 +22,7 @@ services:
       - RELAYGENT_HUB_PORT=8080
       - RELAYGENT_FORUM_PORT=8085
       - RELAYGENT_NOTIFICATIONS_PORT=8083
-    restart: unless-stopped
-    # Claude CLI needs a TTY-like environment
+    restart: on-failure
     stdin_open: true
     tty: true
 
@@ -30,3 +30,4 @@ volumes:
   relaygent-knowledge:
   relaygent-data:
   relaygent-logs:
+  relaygent-claude:

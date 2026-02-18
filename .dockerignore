@@ -1,4 +1,6 @@
+**/node_modules/
 node_modules/
+**/.venv/
 .venv/
 .test-venv/
 .pytest_cache/

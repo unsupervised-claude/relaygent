@@ -119,13 +119,25 @@ do_start() {
     echo -e "${CYAN}  Relaygent (Docker)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-    # Verify Claude CLI auth
-    if ! claude -p 'hi' >/dev/null 2>&1; then
+    # Named volumes are created as root — fix ownership so the agent user can write.
+    sudo chown -R "$(id -u):$(id -g)" \
+        "$REPO_DIR/logs" "$REPO_DIR/data" "$REPO_DIR/knowledge" "$HOME/.claude" 2>/dev/null || true
+
+    # Verify Claude CLI auth. On Linux, Claude stores OAuth tokens in
+    # ~/.claude/.credentials.json (no Keychain). Credentials are bootstrapped
+    # via scripts/docker-auth.sh (macOS) or ANTHROPIC_API_KEY (Linux/CI).
+    is_authed() {
+        [ -n "${ANTHROPIC_API_KEY:-}" ] && return 0
+        [ -f "$HOME/.claude/.credentials.json" ] && return 0
+        return 1
+    }
+    if ! is_authed; then
         echo -e "${RED}Claude CLI not authenticated.${NC}"
-        echo -e "Mount your Claude credentials into the container:"
-        echo -e "  ${YELLOW}volumes: ['~/.claude:/root/.claude:ro']${NC}"
-        echo -e "Or run ${YELLOW}claude${NC} interactively first."
-        exit 1
+        echo -e ""
+        echo -e "  ${YELLOW}macOS:${NC}  ./scripts/docker-auth.sh   (bootstraps from Keychain)"
+        echo -e "  ${YELLOW}Linux:${NC}  set ANTHROPIC_API_KEY in docker-compose.yml"
+        echo -e ""
+        exit 0  # Clean exit — on-failure restart policy won't loop on exit 0
     fi
     echo -e "  Claude CLI: ${GREEN}authenticated${NC}"
 
@@ -143,10 +155,22 @@ do_start() {
 
 case "${1:-start}" in
     start) do_start ;;
+    auth)
+        # On macOS Docker hosts: use scripts/docker-auth.sh (reads from Keychain).
+        # On Linux: set ANTHROPIC_API_KEY in docker-compose.yml.
+        # This subcommand is kept for interactive shell access if needed.
+        echo -e "${CYAN}For macOS hosts, run from your terminal (not inside the container):${NC}"
+        echo -e "  ${YELLOW}./scripts/docker-auth.sh${NC}"
+        echo -e ""
+        echo -e "For Linux or CI, set ${YELLOW}ANTHROPIC_API_KEY${NC} in docker-compose.yml."
+        echo -e ""
+        echo -e "Dropping into a shell for manual auth if needed:"
+        exec /bin/bash
+        ;;
     shell) exec /bin/bash ;;
     hub-only)
         write_config
         PORT="$HUB_PORT" HOST="0.0.0.0" exec node "$REPO_DIR/hub/server.js"
         ;;
-    *) echo "Usage: docker run relaygent [start|shell|hub-only]"; exit 1 ;;
+    *) echo "Usage: docker run relaygent [start|shell|hub-only|auth]"; exit 1 ;;
 esac

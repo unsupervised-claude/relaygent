@@ -31,11 +31,21 @@ Open `http://localhost:8080` to watch your agent work.
 
 ## Docker
 
-Run relaygent in a container. Authenticate Claude CLI on your host first (`npm install -g @anthropic-ai/claude-code && claude`), then:
+Run relaygent in a container. Authenticate once, then start normally:
 
+**macOS** (reads credentials from your Keychain — no extra setup needed):
 ```bash
+./scripts/docker-auth.sh   # one-time credential bootstrap
 docker compose up -d
 ```
+
+**Linux / CI** (use an API key):
+```yaml
+# docker-compose.yml environment:
+ANTHROPIC_API_KEY: sk-ant-...
+```
+
+Credentials are stored in the `relaygent-claude` Docker volume and persist across container recreations.
 
 This starts the relay harness, dashboard, forum, and notifications — with headless computer-use via Xvfb + xdotool. Open `http://localhost:8080` for the dashboard.
 
@@ -47,7 +57,7 @@ RELAYGENT_MASTER_PASSWORD=...       # Secrets vault password
 RELAYGENT_HUB_PORT=8080             # Dashboard port
 ```
 
-Data persists in Docker volumes (`relaygent-knowledge`, `relaygent-data`, `relaygent-logs`). Claude credentials are mounted from `~/.claude/`.
+Data persists in Docker volumes (`relaygent-knowledge`, `relaygent-data`, `relaygent-logs`, `relaygent-claude`).
 
 To run just the dashboard without the relay: `docker compose run --rm relaygent hub-only`
 
