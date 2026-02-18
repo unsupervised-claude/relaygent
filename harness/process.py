@@ -1,6 +1,8 @@
 """Claude subprocess management with hang detection."""
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -92,6 +94,30 @@ class ClaudeProcess:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         return open(LOG_FILE, "a")
 
+    def _get_env(self) -> dict:
+        env = os.environ.copy()
+        tbin = "/data/data/com.termux/files/usr/bin"
+        path = env.get("PATH", "")
+        if tbin not in path:
+            env["PATH"] = tbin + (":" + path if path else "")
+        patch = Path(__file__).parent.parent / "computer-use" / "dns-patch.cjs"
+        if patch.exists():
+            flag = f"--require {patch}"
+            existing = env.get("NODE_OPTIONS", "")
+            if flag not in existing:
+                env["NODE_OPTIONS"] = (existing + " " + flag).strip()
+        return env
+    def _claude_cmd(self, *args: str) -> list[str]:
+        """Resolve claude command, using node+absolute path on Android."""
+        env_path = self._get_env().get("PATH", "")
+        claude = shutil.which("claude", path=env_path)
+        if claude:
+            real = os.path.realpath(claude)
+            node = shutil.which("node", path=env_path)
+            if node and real.endswith(".js"):
+                return [node, real, *args]
+        return ["claude", *args]
+
     def start_fresh(self) -> int:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
@@ -99,14 +125,15 @@ class ClaudeProcess:
         try:
             with open(PROMPT_FILE) as stdin:
                 self.process = subprocess.Popen(
-                    ["claude",
+                    self._claude_cmd(
                      "--print", "--dangerously-skip-permissions",
                      "--settings", settings_file,
-                     "--session-id", self.session_id],
+                     "--session-id", self.session_id),
                     stdin=stdin,
                     stdout=self._log_file,
                     stderr=subprocess.STDOUT,
                     cwd=str(self.workspace),
+                    env=self._get_env(),
                 )
         except OSError:
             self._close_log()
@@ -119,81 +146,54 @@ class ClaudeProcess:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
         settings_file = str(Path(__file__).parent / "settings.json")
-        cmd = ["claude", "--resume", self.session_id,
-               "--print", "--dangerously-skip-permissions", "--settings", settings_file]
+        cmd = self._claude_cmd("--resume", self.session_id,
+               "--print", "--dangerously-skip-permissions", "--settings", settings_file)
         try:
             self.process = subprocess.Popen(
                 cmd, stdin=subprocess.PIPE, stdout=self._log_file,
-                stderr=subprocess.STDOUT, cwd=str(self.workspace))
+                stderr=subprocess.STDOUT, cwd=str(self.workspace),
+                env=self._get_env())
         except OSError:
             self._close_log()
             raise
         try:
             if self.process.stdin and not self.process.stdin.closed:
-                self.process.stdin.write(message.encode())
-                self.process.stdin.flush()
-                self.process.stdin.close()
-            else:
-                log("WARNING: stdin unavailable (process may have exited)")
+                self.process.stdin.write(message.encode()); self.process.stdin.flush(); self.process.stdin.close()
+            else: log("WARNING: stdin unavailable (process may have exited)")
         except (BrokenPipeError, OSError) as e:
             log(f"WARNING: Could not write to Claude stdin: {e}")
         return log_start
 
     def monitor(self, log_start: int) -> ClaudeResult:
-        """Monitor process with hang detection. Blocks until process exits."""
         attempt_start = time.time()
         hung, timed_out, last_hang_check = False, False, 0.0
         initial_jsonl_size = get_jsonl_size(self.session_id, self.workspace)
         last_jsonl_size, last_activity_time = initial_jsonl_size, time.time()
-
         while self.process.poll() is None:
-            attempt_elapsed = time.time() - attempt_start
-
+            elapsed = time.time() - attempt_start
             if self.timer.is_expired():
-                log("Time limit reached, terminating...")
-                self._terminate()
-                timed_out = True
-                break
-
-            if (attempt_elapsed >= HANG_CHECK_DELAY
-                    and attempt_elapsed - last_hang_check >= HANG_CHECK_DELAY):
-                last_hang_check = attempt_elapsed
+                log("Time limit reached, terminating..."); self._terminate(); timed_out = True; break
+            if elapsed >= HANG_CHECK_DELAY and elapsed - last_hang_check >= HANG_CHECK_DELAY:
+                last_hang_check = elapsed
                 if self._check_for_hang(log_start):
-                    log("Hang detected (error pattern), killing...")
-                    hung = True
-                    self._terminate()
-                    break
-
-            current_jsonl_size = get_jsonl_size(self.session_id, self.workspace)
-            if current_jsonl_size > last_jsonl_size:
-                last_jsonl_size = current_jsonl_size
-                last_activity_time = time.time()
+                    log("Hang detected (error pattern), killing..."); hung = True; self._terminate(); break
+            cur = get_jsonl_size(self.session_id, self.workspace)
+            if cur > last_jsonl_size: last_jsonl_size = cur; last_activity_time = time.time()
             elif time.time() - last_activity_time > SILENCE_TIMEOUT:
                 log(f"Hang detected (no activity for {SILENCE_TIMEOUT}s), killing...")
-                hung = True
-                self._terminate()
-                break
-
+                hung = True; self._terminate(); break
             if not self._context_warning_sent:
-                current_fill = self.get_context_fill()
-                if current_fill >= CONTEXT_THRESHOLD:
-                    log(f"Context at {current_fill:.0f}% (hook handling wrap-up warning)")
-                    self._context_warning_sent = True
-
-            remaining = self.timer.remaining()
-            sleep_s = 1 if remaining <= 60 else (5 if remaining <= 300 else 30)
-            time.sleep(sleep_s)
-
+                fill = self.get_context_fill()
+                if fill >= CONTEXT_THRESHOLD:
+                    log(f"Context at {fill:.0f}% (hook handling wrap-up warning)"); self._context_warning_sent = True
+            rem = self.timer.remaining()
+            time.sleep(1 if rem <= 60 else (5 if rem <= 300 else 30))
         if self.process.poll() is None:
-            try:
-                self.process.wait(timeout=30)
+            try: self.process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                log("WARNING: Process stuck after monitor, force killing")
-                self.process.kill()
-                try:
-                    self.process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    log("WARNING: Process did not die after kill")
+                log("WARNING: Process stuck after monitor, force killing"); self.process.kill()
+                try: self.process.wait(timeout=10)
+                except subprocess.TimeoutExpired: log("WARNING: Process did not die after kill")
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
         return ClaudeResult(exit_code=self.process.returncode or 0, hung=hung, timed_out=timed_out,

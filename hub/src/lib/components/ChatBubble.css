@@ -47,6 +47,7 @@
 .cb-inp button:hover:not(:disabled) { opacity: 0.9; }
 .cb-inp button:disabled { opacity: 0.4; cursor: not-allowed; }
 @media (max-width: 500px) {
-	.cb-panel { width: calc(100vw - 2em); right: -0.5em; bottom: 65px; height: 75vh; }
+	.cb-panel { width: calc(100vw - 2em); right: -0.5em; bottom: 65px; height: 75dvh; }
 	.cb-wrap { bottom: 1em; right: 1em; }
+	.cb-inp textarea { font-size: 16px; } /* prevent iOS/Android zoom on focus */
 }

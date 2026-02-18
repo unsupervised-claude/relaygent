@@ -39,6 +39,7 @@
 	<div class="links" class:open={menuOpen}>
 		<a href="/intent" class:active={isActive('/intent')} onclick={closeMenu}>Intent</a>
 		<a href="/kb" class:active={isActive('/kb')} onclick={closeMenu}>KB</a>
+		<a href="/chat" class:active={isActive('/chat')} onclick={closeMenu}>Chat</a>
 		<a href="/stream" class:active={isActive('/stream')} onclick={closeMenu}>Screen</a>
 		<a href="/notifications" class:active={isActive('/notifications')} onclick={closeMenu}>Notifications</a>
 		<a href="/search" class:active={isActive('/search')} onclick={closeMenu}>Search</a>
@@ -65,7 +66,7 @@
 	.app-wrapper {
 		--bg: #fafafa; --bg-surface: #fff; --text: #1a1a1a; --text-muted: #555;
 		--link: #2563eb; --border: #e5e5e5; --code-bg: #f0f0f0; --th-bg: #f5f5f5;
-		background: var(--bg); color: var(--text); min-height: 100vh;
+		background: var(--bg); color: var(--text); min-height: 100dvh;
 	}
 	.app-wrapper.dark {
 		--bg: #0d1117; --bg-surface: #161b22; --text: #e6edf3; --text-muted: #8b949e;
