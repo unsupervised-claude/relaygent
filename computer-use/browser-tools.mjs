@@ -146,7 +146,7 @@ export function registerBrowserTools(server, IS_LINUX) {
       if (!raw) return jsonRes({ error: `Element not found: ${selector}` });
       let coords;
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
-      return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 400);
+      return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 1000);
     }
   );
 
@@ -161,7 +161,7 @@ export function registerBrowserTools(server, IS_LINUX) {
       let coords;
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
       if (coords.error) return jsonRes(coords);
-      return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 400);
+      return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 1000);
     }
   );
 
