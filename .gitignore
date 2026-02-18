@@ -11,7 +11,9 @@ package-lock.json
 harness/settings.json
 knowledge/
 data/
+data-*/
 logs/
+harness/.last_run_timestamp
 
 # Secrets and credentials
 .env
