@@ -41,6 +41,29 @@ def format_reminders(notifs: list) -> list[str]:
     return parts
 
 
+def format_email(notifs: list) -> list[str]:
+    """Format email notifications."""
+    parts = []
+    for n in notifs:
+        count = n.get("count", len(n.get("messages", [])))
+        source = n.get("source", "Email")
+        noun = "email" if count == 1 else "emails"
+        parts.append(f"\u2709\ufe0f {count} unread {noun} in {source}")
+    return parts
+
+
+def format_slack(notifs: list) -> list[str]:
+    """Format Slack notifications (type=slack from wake-triggers)."""
+    tagged = []
+    for n in notifs:
+        channels = [
+            {"id": m.get("channel_id", "?"), "name": m.get("channel_name", ""), "unread": m.get("unread", 0)}
+            for m in n.get("messages", [])
+        ]
+        tagged.append(dict(n, source="slack", channels=channels))
+    return format_chat(tagged)
+
+
 def format_unknown(notifs: list) -> list[str]:
     """Format unrecognized notification types."""
     parts = []
@@ -54,6 +77,8 @@ def format_unknown(notifs: list) -> list[str]:
 FORMATTERS = {
     "message": format_chat,
     "reminder": format_reminders,
+    "email": format_email,
+    "slack": format_slack,
 }
 
 

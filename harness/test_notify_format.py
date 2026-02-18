@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from notify_format import format_chat, format_notifications, format_reminders, format_unknown
+from notify_format import format_chat, format_email, format_notifications, format_reminders, format_slack, format_unknown
 
 
 class TestFormatChat:
@@ -135,3 +135,63 @@ class TestFormatChatSlack:
         notifs = [{"source": "slack", "channels": [{"name": "general"}]}]
         result = format_chat(notifs)
         assert "0" in result[0]
+
+
+class TestFormatEmail:
+    def test_formats_count_and_source(self):
+        notifs = [{"type": "email", "count": 3, "source": "Gmail", "messages": []}]
+        result = format_email(notifs)
+        assert len(result) == 1
+        assert "3" in result[0]
+        assert "Gmail" in result[0]
+        assert "emails" in result[0]
+
+    def test_singular_email(self):
+        notifs = [{"type": "email", "count": 1, "source": "Gmail", "messages": []}]
+        result = format_email(notifs)
+        assert "1 unread email in" in result[0]
+        assert "emails" not in result[0]
+
+    def test_count_falls_back_to_messages_length(self):
+        notifs = [{"type": "email", "messages": [{"id": "a"}, {"id": "b"}]}]
+        result = format_email(notifs)
+        assert "2" in result[0]
+
+    def test_default_source(self):
+        notifs = [{"type": "email", "count": 1}]
+        result = format_email(notifs)
+        assert "Email" in result[0]
+
+
+class TestFormatSlack:
+    def test_formats_channel_from_wake_triggers(self):
+        """Slack notifications from wake-triggers have type=slack, messages with channel_id/name."""
+        notifs = [{"type": "slack", "count": 5,
+                   "messages": [{"channel_id": "C0AG77MFLAU", "channel_name": "general", "unread": 5}]}]
+        result = format_slack(notifs)
+        assert len(result) == 1
+        assert "general" in result[0]
+        assert "5" in result[0]
+
+    def test_multiple_channels(self):
+        notifs = [{"type": "slack", "messages": [
+            {"channel_id": "C001", "channel_name": "general", "unread": 2},
+            {"channel_id": "C002", "channel_name": "dev", "unread": 1},
+        ]}]
+        result = format_slack(notifs)
+        assert "general" in result[0]
+        assert "dev" in result[0]
+
+    def test_all_types_via_format_notifications(self):
+        """Email and slack use proper formatters, not format_unknown."""
+        notifs = [
+            {"type": "message", "messages": [{"content": "Hello"}]},
+            {"type": "reminder", "id": 1, "message": "Do the thing"},
+            {"type": "email", "count": 2, "source": "Gmail", "messages": []},
+            {"type": "slack", "messages": [{"channel_id": "C001", "channel_name": "general", "unread": 1}]},
+        ]
+        result = format_notifications(notifs)
+        assert "Hello" in result
+        assert "Do the thing" in result
+        assert "Gmail" in result and "[email]" not in result
+        assert "general" in result and "[slack]" not in result
