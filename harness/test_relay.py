@@ -136,3 +136,55 @@ class TestNoOutput:
         ]
         exit_code = _run_with_results(runner, results)
         assert exit_code == 0
+
+    def test_no_output_on_resume_starts_fresh(self, runner):
+        """No output on resume attempt → start a fresh session."""
+        r, _ = runner
+        results = [
+            _result(exit_code=0),     # clean exit → session_established=True
+            _result(no_output=True),  # no output on resume → reset to fresh
+            _result(exit_code=0),     # clean on fresh
+        ]
+        exit_code = _run_with_results(runner, results)
+        assert exit_code == 0
+
+
+class TestContextFill:
+    def test_context_fill_spawns_successor(self, runner):
+        """Context at/above threshold with successor time → spawn successor."""
+        r, _ = runner
+        r.timer.has_successor_time.return_value = True
+        results = [
+            _result(exit_code=0, context_pct=86.0),  # context full → spawn successor
+            _result(exit_code=0),                     # successor clean exit
+        ]
+        _run_with_results(runner, results)
+        # start_fresh called at least twice: initial session + successor
+        assert r.claude.start_fresh.call_count >= 2
+
+    def test_context_fill_no_successor_time_sleeps(self, runner):
+        """Context full but no successor time → go to sleep cycle instead."""
+        r, _ = runner
+        r.timer.has_successor_time.return_value = False
+        results = [
+            _result(exit_code=0, context_pct=90.0),  # context full, but no successor time
+        ]
+        exit_code = _run_with_results(runner, results)
+        assert exit_code == 0
+        # sleep cycle should have been called
+        r.sleep_mgr.run_wake_cycle.assert_called_once()
+
+
+class TestShouldSleepFalse:
+    def test_no_stdout_resumes(self, runner):
+        """should_sleep=False (no stdout marker) → resume instead of sleeping."""
+        r, _ = runner
+        results = [
+            _result(exit_code=0),  # clean exit but should_sleep returns False → resume
+            _result(exit_code=0),  # then clean
+        ]
+        with patch("relay.should_sleep", return_value=False):
+            exit_code = _run_with_results(runner, results)
+        assert exit_code == 0
+        # Should have resumed (not gone to sleep cycle)
+        r.sleep_mgr.run_wake_cycle.assert_not_called()
