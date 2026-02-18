@@ -1,12 +1,20 @@
 """Claude subprocess management with hang detection."""
 from __future__ import annotations
 
+import json
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from config import CONTEXT_THRESHOLD, HANG_CHECK_DELAY, LOG_FILE, PROMPT_FILE, SILENCE_TIMEOUT, Timer, log
+
+def _configured_model() -> str | None:
+    """Read model from ~/.relaygent/config.json, or None for default."""
+    try:
+        return json.loads((Path.home() / ".relaygent" / "config.json").read_text()).get("model")
+    except (OSError, json.JSONDecodeError, KeyError):
+        return None
 from jsonl_checks import (
     check_incomplete_exit,
     get_context_fill_from_jsonl,
@@ -39,58 +47,47 @@ class ClaudeProcess:
 
     def _get_log_lines(self) -> int:
         try:
-            if not LOG_FILE.exists():
-                return 0
-            with open(LOG_FILE) as f:
-                return sum(1 for _ in f)
-        except OSError:
-            return 0
+            if not LOG_FILE.exists(): return 0
+            with open(LOG_FILE) as f: return sum(1 for _ in f)
+        except OSError: return 0
 
     def _check_for_hang(self, log_start: int) -> bool:
         try:
-            if not LOG_FILE.exists():
-                return False
-            with open(LOG_FILE) as f:
-                content = "".join(f.readlines()[log_start:])
+            if not LOG_FILE.exists(): return False
+            with open(LOG_FILE) as f: content = "".join(f.readlines()[log_start:])
             return any(s in content for s in ("No messages returned", "API Error"))
-        except OSError:
-            return False
+        except OSError: return False
 
     def get_context_fill(self) -> float:
         try:
             pct = float(CONTEXT_PCT_FILE.read_text().strip()) if CONTEXT_PCT_FILE.exists() else 0
-            if pct > 0:
-                return pct
-        except (OSError, ValueError):
-            pass
+            if pct > 0: return pct
+        except (OSError, ValueError): pass
         return get_context_fill_from_jsonl(self.session_id, self.workspace)
 
     def _terminate(self) -> None:
-        if not self.process or self.process.poll() is not None:
-            return
+        if not self.process or self.process.poll() is not None: return
         log("Terminating Claude process...")
         self.process.terminate()
         try:
-            self.process.wait(timeout=5)
-            return
-        except subprocess.TimeoutExpired:
-            log("Graceful terminate failed, killing...")
+            self.process.wait(timeout=5); return
+        except subprocess.TimeoutExpired: log("Graceful terminate failed, killing...")
         self.process.kill()
-        try:
-            self.process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            log("WARNING: Process did not die after kill")
-            self.process = None
+        try: self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired: log("WARNING: Process did not die after kill"); self.process = None
 
     def _close_log(self):
-        if self._log_file and not self._log_file.closed:
-            self._log_file.close()
+        if self._log_file and not self._log_file.closed: self._log_file.close()
         self._log_file = None
 
     def _open_log(self):
         self._close_log()
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         return open(LOG_FILE, "a")
+
+    def _model_args(self) -> list[str]:
+        m = _configured_model()
+        return ["--model", m] if m else []
 
     def start_fresh(self) -> int:
         log_start = self._get_log_lines()
@@ -102,7 +99,8 @@ class ClaudeProcess:
                     ["claude",
                      "--print", "--dangerously-skip-permissions",
                      "--settings", settings_file,
-                     "--session-id", self.session_id],
+                     "--session-id", self.session_id,
+                     *self._model_args()],
                     stdin=stdin,
                     stdout=self._log_file,
                     stderr=subprocess.STDOUT,
@@ -120,7 +118,8 @@ class ClaudeProcess:
         self._log_file = self._open_log()
         settings_file = str(Path(__file__).parent / "settings.json")
         cmd = ["claude", "--resume", self.session_id,
-               "--print", "--dangerously-skip-permissions", "--settings", settings_file]
+               "--print", "--dangerously-skip-permissions", "--settings", settings_file,
+               *self._model_args()]
         try:
             self.process = subprocess.Popen(
                 cmd, stdin=subprocess.PIPE, stdout=self._log_file,
