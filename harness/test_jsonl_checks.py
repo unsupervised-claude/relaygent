@@ -26,7 +26,7 @@ def tmp_jsonl(tmp_path):
     session_id = "test-session-abc"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    slug = str(workspace).replace("/", "-")
+    slug = str(workspace).replace("/", "-").replace(".", "-")
     project_dir = tmp_path / ".claude" / "projects" / slug
     project_dir.mkdir(parents=True)
     jsonl_path = project_dir / f"{session_id}.jsonl"
@@ -38,9 +38,6 @@ def tmp_jsonl(tmp_path):
 
     with patch("jsonl_checks.Path.home", return_value=tmp_path):
         yield session_id, workspace, jsonl_path, write_entries
-
-
-# --- _read_tail ---
 
 
 class TestReadTail:
@@ -80,8 +77,6 @@ class TestReadTail:
         assert _read_tail(f) == []
 
 
-# --- get_jsonl_size ---
-
 
 class TestGetJsonlSize:
     def test_returns_size(self, tmp_jsonl):
@@ -95,8 +90,18 @@ class TestGetJsonlSize:
         sid, ws, path, write = tmp_jsonl
         assert get_jsonl_size("nonexistent-id", ws) == 0
 
+    def test_path_with_dots(self, tmp_path):
+        """Android paths like com.termux must slugify dots to dashes."""
+        sid, ws = "test-session-abc", tmp_path / "com.termux" / "files" / "home"
+        ws.mkdir(parents=True)
+        slug = str(ws).replace("/", "-").replace(".", "-")
+        pdir = tmp_path / ".claude" / "projects" / slug
+        pdir.mkdir(parents=True)
+        (pdir / f"{sid}.jsonl").write_text('{"type": "assistant"}\n')
+        with patch("jsonl_checks.Path.home", return_value=tmp_path):
+            assert get_jsonl_size(sid, ws) > 0
 
-# --- check_incomplete_exit ---
+
 
 
 class TestCheckIncompleteExit:
@@ -147,7 +152,6 @@ class TestCheckIncompleteExit:
         assert not incomplete  # Gracefully handles parse errors
 
 
-# --- should_sleep ---
 
 
 class TestShouldSleep:

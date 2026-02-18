@@ -17,7 +17,8 @@ from config import CONTEXT_WINDOW, log
 def find_jsonl_path(session_id: str, workspace: Path) -> Path | None:
     """Find the jsonl file for a session."""
     claude_dir = Path.home() / ".claude" / "projects"
-    workspace_slug = str(workspace).replace("/", "-")
+    # Claude CLI replaces both '/' and '.' with '-' when computing the project slug
+    workspace_slug = str(workspace).replace("/", "-").replace(".", "-")
     project_dir = claude_dir / workspace_slug
     if project_dir.exists():
         jsonl = project_dir / f"{session_id}.jsonl"
