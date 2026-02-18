@@ -64,6 +64,17 @@ def screenshot(params: dict) -> tuple[dict, int]:
 
 def windows(_params: dict) -> tuple[dict, int]:
     wins = []
+    # Build WM_CLASS lookup from wmctrl -l -x (for app names)
+    wm_classes: dict[str, str] = {}
+    try:
+        xout = _run(["wmctrl", "-l", "-x"])
+        for line in xout.splitlines():
+            parts = line.split(None, 3)
+            if len(parts) >= 3:
+                # parts[2] is WM_CLASS, e.g. "xfce4-terminal.Xfce4-terminal"
+                wm_classes[parts[0]] = parts[2].split(".")[0]
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
     try:
         out = _run(["wmctrl", "-l", "-G", "-p"])
         for line in out.splitlines():
@@ -72,7 +83,8 @@ def windows(_params: dict) -> tuple[dict, int]:
                 wid = parts[0]
                 x, y, w, h = int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6])
                 title = parts[8] if len(parts) > 8 else ""
-                wins.append({"id": wid, "title": title, "app": "",
+                app_name = wm_classes.get(wid, "")
+                wins.append({"id": wid, "title": title, "app": app_name,
                              "frame": {"x": x, "y": y, "w": w, "h": h},
                              "focused": False})
     except (subprocess.SubprocessError, FileNotFoundError, ValueError):
@@ -120,7 +132,8 @@ def focus(params: dict) -> tuple[dict, int]:
     if not app:
         return {"error": "app or window_id required"}, 400
     try:
-        out = _run(["wmctrl", "-l"])
+        # Search by title and WM_CLASS (-x includes class column)
+        out = _run(["wmctrl", "-l", "-x"])
         app_lower = app.lower()
         for line in out.splitlines():
             if app_lower in line.lower():
