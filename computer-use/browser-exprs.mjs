@@ -40,7 +40,7 @@ export const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `if(el.matches('[class*="-control"],[class*="__control"]')||el.closest('[class*="-control"],[class*="__control"]')){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));}else{el.click();}` +
   `${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
-const _setSV = `var _ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');var _sv=function(e,v){if(_ns&&_ns.set)_ns.set.call(e,v);else e.value=v};`;
+const _setSV = `var _sv=function(e,v){var p=e.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;var d=Object.getOwnPropertyDescriptor(p,'value');if(d&&d.set)d.set.call(e,v);else e.value=v};`;
 export const TYPE_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);if(!el)return 'not found';` +
   `el.scrollIntoView({block:'nearest'});el.focus();` +
