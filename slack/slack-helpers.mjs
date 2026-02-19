@@ -18,6 +18,20 @@ export async function userName(uid) {
 	} catch { userCache.set(uid, uid); return uid; }
 }
 
+// Resolve Slack mrkdwn: <@UID> → @Name, <URL|text> → text, <URL> → URL
+export async function formatText(text) {
+	if (!text) return "";
+	// Resolve user mentions async
+	const mentionRe = /<@(U[A-Z0-9]+)>/g;
+	const uids = [...text.matchAll(mentionRe)].map(m => m[1]);
+	const names = await Promise.all(uids.map(u => userName(u)));
+	let out = text;
+	uids.forEach((uid, i) => { out = out.replaceAll(`<@${uid}>`, `@${names[i]}`); });
+	// Resolve links: <URL|label> → label, <URL> → URL
+	out = out.replace(/<([^|>]+)\|([^>]+)>/g, "$2").replace(/<(https?:[^>]+)>/g, "$1");
+	return out;
+}
+
 // Resolve DM channel to partner's display name
 export async function dmName(ch) {
 	if (ch.is_im && ch.user) return `DM: ${await userName(ch.user)}`;

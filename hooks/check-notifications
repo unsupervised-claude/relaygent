@@ -26,7 +26,33 @@ fi
 
 # Ensure slack-socket-listener is running (Socket Mode for real-time Slack)
 SOCKET_SCRIPT="$(cd "$(dirname "$0")/../notifications" && pwd)/slack-socket-listener.mjs"
+SOCKET_CACHE="/tmp/relaygent-slack-socket-cache.json"
 SOCKET_CRASH_FILE="/tmp/relaygent-socket-last-start"
+SOCKET_STALE_MINS=15
+# Kill stale listener (running but cache not updated in >15 min — silent dead connection)
+if pgrep -f "slack-socket-listener" &>/dev/null; then
+    cache_updated=$(python3 -c "
+import json,time,os
+try:
+    d=json.load(open('$SOCKET_CACHE'))
+    age=(time.time()*1000-d.get('updated',0))/60000
+    print('stale' if age>$SOCKET_STALE_MINS else 'ok')
+except: print('ok')
+" 2>/dev/null)
+    if [[ "$cache_updated" = "stale" ]]; then
+        # Only kill if we haven't recently restarted (60s cooldown prevents duplicate spawns)
+        stale_ok=true
+        if [[ -f "$SOCKET_CRASH_FILE" ]]; then
+            sock_last=$(cat "$SOCKET_CRASH_FILE" 2>/dev/null || echo 0)
+            sock_now=$(date +%s)
+            (( sock_now - sock_last < 60 )) && stale_ok=false
+        fi
+        if [[ "$stale_ok" = true ]]; then
+            pkill -f "slack-socket-listener" 2>/dev/null || true
+            sleep 0.5
+        fi
+    fi
+fi
 if ! pgrep -f "slack-socket-listener" &>/dev/null; then
     if [[ -f "$SOCKET_SCRIPT" ]]; then
         sock_ok=true

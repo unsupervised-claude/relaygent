@@ -63,6 +63,44 @@ function log(msg) {
 
 let selfUid = null;
 
+async function backfill(web) {
+  const cache = readCache();
+  const lastAck = getLastAckTs();
+  const msgs = cache.messages || [];
+  const lastCachedTs = msgs.length ? Math.max(...msgs.map(m => parseFloat(m.ts || "0"))) : 0;
+  const oldest = Math.max(lastAck, lastCachedTs);
+  if (!oldest) return;
+
+  // Only fetch DMs and the most active channels (limit API calls)
+  const channelRes = await web.conversations.list({
+    types: "im,mpim", exclude_archived: true, limit: 20,
+  });
+  const channels = (channelRes.channels || []).filter(c => c.is_member).slice(0, 5);
+  let added = 0;
+  const skipSubtypes = new Set(["channel_join","bot_message","message_changed","message_deleted"]);
+  for (const ch of channels) {
+    try {
+      const hist = await web.conversations.history({ channel: ch.id, oldest: String(oldest), limit: 5 });
+      for (const m of (hist.messages || []).reverse()) {
+        if (m.user === selfUid) continue;
+        if (parseFloat(m.ts) <= oldest) continue;
+        if (msgs.find(x => x.ts === m.ts)) continue;
+        if (m.subtype && skipSubtypes.has(m.subtype)) continue;
+        const channelName = ch.name || ch.id;
+        msgs.push({ channel: ch.id, channel_name: channelName,
+          user: m.user || "", text: (m.text || "").slice(0, 500), ts: m.ts, received: Date.now() });
+        added++;
+      }
+      await new Promise(r => setTimeout(r, 500)); // rate limit: 2 req/sec
+    } catch { /* skip */ }
+  }
+  if (added > 0) {
+    cache.messages = msgs.slice(-MAX_MESSAGES);
+    writeCache(cache);
+    log(`Backfilled ${added} missed DM message(s)`);
+  }
+}
+
 async function start() {
   const appToken = loadAppToken();
   const userToken = loadUserToken();
@@ -125,10 +163,15 @@ async function start() {
     log(`Message in #${channelName} from ${event.user}: ${(event.text || "").slice(0, 80)}`);
   });
 
-  client.on("connected", () => {
+  client.on("connected", async () => {
     log("Socket Mode connected");
-    // Write empty cache to signal we're alive
+    // Write cache to signal we're alive, then backfill missed messages
     writeCache(readCache());
+    try {
+      await backfill(web);
+    } catch (e) {
+      log(`Backfill error: ${e.message}`);
+    }
   });
 
   client.on("disconnected", () => {
