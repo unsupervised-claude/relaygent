@@ -16,41 +16,45 @@ const _deep = `function _dqa(s,r){r=r||document;var o=Array.from(r.querySelector
   `function _dq(s,r){r=r||document;var e=r.querySelector(s);if(e)return e;` +
   `var a=r.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot){e=_dq(s,a[i].shadowRoot);if(e)return e}}return null}`;
 
+// Frame root helper — use window.frames[N].document when frame index given
+const frameRoot = (frame) => frame != null ? `window.frames[${frame}].document` : `document`;
+
 // Prefer first visible element matching selector (skip hidden 0x0 elements); no fallback to hidden
-const _vis = `var a=_dqa(S);` +
+const _vis = `var a=_dqa(S,ROOT);` +
   `var el=a.find(function(e){return e.offsetParent!==null&&e.getBoundingClientRect().width>0});`;
-const _coords = `var r=el.getBoundingClientRect();` +
-  `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
-  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))})`;
 
-const COORD_EXPR = (sel) =>
-  `(function(){${_deep}var S=${JSON.stringify(sel)};${_vis}if(!el)return null;${_coords}})()`;
+// Coords: add iframe offset when targeting a frame; extra = additional JSON fields
+const _frOff = (frame) => frame != null
+  ? `var _fr=document.querySelectorAll('iframe')[${frame}],_fo=_fr?_fr.getBoundingClientRect():{left:0,top:0};`
+  : ``;
+const _sxsy = (frame) => frame != null
+  ? `sx:Math.round(r.left+_fo.left+r.width/2+window.screenX),sy:Math.round(r.top+_fo.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))`
+  : `sx:Math.round(r.left+r.width/2+window.screenX),sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight))`;
+const retCoords = (frame, extra = ``) =>
+  `${_frOff(frame)}var r=el.getBoundingClientRect();return JSON.stringify({${_sxsy(frame)}${extra}})`;
 
-const CLICK_EXPR = (sel) =>
-  `(function(){${_deep}var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.click();${_coords}})()`;
+const COORD_EXPR = (sel, frame) =>
+  `(function(){${_deep}var ROOT=${frameRoot(frame)};var S=${JSON.stringify(sel)};${_vis}if(!el)return null;${retCoords(frame)}})()`;
+const CLICK_EXPR = (sel, frame) =>
+  `(function(){${_deep}var ROOT=${frameRoot(frame)};var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.click();${retCoords(frame)}})()`;
 
 // Normalize nbsp + curly quotes for text matching
 const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
 const _textSel = `'a,button,input[type=submit],input[type=button],[role=button]'`;
 
 // Exact match preferred over substring match for text-based element finding
-const TEXT_MATCH_EXPR = (text, idx, click) =>
-  `(function(){${_deep}${_norm};var t=norm(${JSON.stringify(text)}),i=${idx};` +
-  `var els=_dqa(${_textSel}).filter(function(e){return e.offsetParent!==null});` +
+const TEXT_CLICK_EXPR = (text, idx, frame) =>
+  `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
+  `var els=_dqa(${_textSel},ROOT).filter(function(e){return e.offsetParent!==null});` +
   `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
   `var matches=exact.length?exact:els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)});` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
-  (click ? `el.click();` : ``) +
-  `var r=el.getBoundingClientRect();` +
-  `return JSON.stringify({sx:Math.round(r.left+r.width/2+window.screenX),` +
-  `sy:Math.round(r.top+r.height/2+window.screenY+(window.outerHeight-window.innerHeight)),` +
-  `text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length})})()`;
+  `el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
-const TEXT_COORD_EXPR = (text, idx) => TEXT_MATCH_EXPR(text, idx, false);
-const TEXT_CLICK_EXPR = (text, idx) => TEXT_MATCH_EXPR(text, idx, true);
 
-const TYPE_EXPR = (sel, text, submit) =>
-  `(function(){${_deep}var el=_dq(${JSON.stringify(sel)});` +
+
+const TYPE_EXPR = (sel, text, submit, frame) =>
+  `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);` +
   `if(!el)return 'not found';el.focus();el.value=${JSON.stringify(text)};` +
   `el.dispatchEvent(new Event('input',{bubbles:true}));` +
   `el.dispatchEvent(new Event('change',{bubbles:true}));` +
@@ -59,8 +63,8 @@ const TYPE_EXPR = (sel, text, submit) =>
   `return el.value})()`;
 
 // Keystroke mode: types char-by-char with full key events (for autocomplete/typeahead inputs)
-const TYPE_SLOW_EXPR = (sel, text, submit) =>
-  `(function(){${_deep}var el=_dq(${JSON.stringify(sel)});` +
+const TYPE_SLOW_EXPR = (sel, text, submit, frame) =>
+  `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);` +
   `if(!el)return Promise.resolve('not found');el.focus();el.value='';` +
   `var t=${JSON.stringify(text)};` +
   `return new Promise(function(res){var i=0;(function next(){if(i>=t.length){` +
@@ -110,9 +114,10 @@ export function registerBrowserTools(server, IS_LINUX) {
 
   server.tool("browser_coords",
     "Get screen coordinates {sx, sy} for a CSS selector in Chrome. Use result with click().",
-    { selector: z.string().describe("CSS selector (e.g. 'input', 'a.nav-link', '#submit')") },
-    async ({ selector }) => {
-      const raw = await cdpEval(COORD_EXPR(selector));
+    { selector: z.string().describe("CSS selector (e.g. 'input', 'a.nav-link', '#submit')"),
+      frame: z.coerce.number().optional().describe("iframe index (window.frames[N]) to search inside") },
+    async ({ selector, frame }) => {
+      const raw = await cdpEval(COORD_EXPR(selector, frame));
       if (!raw) return jsonRes({ error: `Element not found: ${selector}` });
       try { return jsonRes(JSON.parse(raw)); } catch { return jsonRes({ error: "Parse failed", raw }); }
     }
@@ -123,9 +128,10 @@ export function registerBrowserTools(server, IS_LINUX) {
     { selector: z.string().describe("CSS selector for the input"),
       text: z.string().describe("Text to type"),
       submit: bool.describe("Submit form after typing (dispatches Enter + form.submit())"),
-      slow: bool.describe("Type char-by-char with key events (for autocomplete/typeahead inputs)") },
-    async ({ selector, text, submit, slow }) => {
-      const expr = slow ? TYPE_SLOW_EXPR(selector, text, submit) : TYPE_EXPR(selector, text, submit);
+      slow: bool.describe("Type char-by-char with key events (for autocomplete/typeahead inputs)"),
+      frame: z.coerce.number().optional().describe("iframe index (window.frames[N]) to target") },
+    async ({ selector, text, submit, slow, frame }) => {
+      const expr = slow ? TYPE_SLOW_EXPR(selector, text, submit, frame) : TYPE_EXPR(selector, text, submit, frame);
       const result = slow ? await cdpEvalAsync(expr) : await cdpEval(expr);
       if (result === "not found") return jsonRes({ error: `Element not found: ${selector}` });
       return actionRes(`Typed into ${selector}: "${text}"${slow ? " (slow)" : ""}${submit ? " (submitted)" : ""}`, submit ? 1500 : 400);
@@ -134,27 +140,29 @@ export function registerBrowserTools(server, IS_LINUX) {
 
   server.tool("browser_click",
     "Click a web element by CSS selector — finds coords and clicks via CDP in one step. Auto-returns screenshot.",
-    { selector: z.string().describe("CSS selector (e.g. 'button[type=submit]', 'a.nav-link', '#login')") },
-    async ({ selector }) => {
-      const raw = await cdpEval(CLICK_EXPR(selector));
+    { selector: z.string().describe("CSS selector (e.g. 'button[type=submit]', 'a.nav-link', '#login')"),
+      frame: z.coerce.number().optional().describe("iframe index (window.frames[N]) to search inside") },
+    async ({ selector, frame }) => {
+      const raw = await cdpEval(CLICK_EXPR(selector, frame));
       if (!raw) return jsonRes({ error: `Element not found: ${selector}` });
       let coords;
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
-      return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 400);
+      return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 1000);
     }
   );
 
   server.tool("browser_click_text",
     "Click a visible element by its text content (links, buttons). Safer than browser_click when multiple elements share a selector. Auto-returns screenshot.",
     { text: z.string().describe("Text to search for (case-insensitive contains match)"),
-      index: z.coerce.number().optional().describe("Which match to click if multiple (default: 0)") },
-    async ({ text, index = 0 }) => {
-      const raw = await cdpEval(TEXT_CLICK_EXPR(text, index));
+      index: z.coerce.number().optional().describe("Which match to click if multiple (default: 0)"),
+      frame: z.coerce.number().optional().describe("iframe index (window.frames[N]) to search inside") },
+    async ({ text, index = 0, frame }) => {
+      const raw = await cdpEval(TEXT_CLICK_EXPR(text, index, frame));
       if (!raw) return jsonRes({ error: `No elements found containing: ${text}` });
       let coords;
       try { coords = JSON.parse(raw); } catch { return jsonRes({ error: "Parse failed", raw }); }
       if (coords.error) return jsonRes(coords);
-      return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 400);
+      return actionRes(`Clicked "${coords.text}" at (${coords.sx},${coords.sy}) [${coords.count} matches]`, 1000);
     }
   );
 
