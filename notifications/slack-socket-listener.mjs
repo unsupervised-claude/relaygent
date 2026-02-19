@@ -186,6 +186,9 @@ async function start() {
     log("Socket Mode disconnected — will auto-reconnect");
   });
 
+  // Heartbeat: touch cache every 5min so stale-detection doesn't kill a healthy connection
+  setInterval(() => writeCache(readCache()), 5 * 60 * 1000);
+
   await client.start();
   log("Slack Socket Mode listener started");
 }
