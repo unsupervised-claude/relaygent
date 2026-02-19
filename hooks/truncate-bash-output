@@ -1,0 +1,49 @@
+#!/bin/bash
+# PostToolUse hook: truncate long Bash output to save context window.
+# If output exceeds threshold, saves full output to temp file and returns
+# a truncated preview with pointer to the file.
+
+MAX_LINES=200
+PREVIEW_LINES=30
+
+INPUT=$(cat)
+TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
+
+if [ "$TOOL_NAME" != "Bash" ]; then
+    exit 0
+fi
+
+OUTPUT=$(printf '%s' "$INPUT" | jq -r '[.tool_response.content[]? | select(.type == "text") | .text] | join("\n")' 2>/dev/null)
+
+if [ -z "$OUTPUT" ]; then
+    exit 0
+fi
+
+LINES=$(printf '%s' "$OUTPUT" | wc -l | tr -d ' ')
+
+if [ "$LINES" -le "$MAX_LINES" ]; then
+    exit 0
+fi
+
+TMPFILE=$(mktemp /tmp/bash-output-XXXXX.txt)
+printf '%s\n' "$OUTPUT" > "$TMPFILE"
+
+PREVIEW=$(printf '%s' "$OUTPUT" | head -"$PREVIEW_LINES")
+TAIL=$(printf '%s' "$OUTPUT" | tail -10)
+
+TRUNCATED="Output was ${LINES} lines (truncated to save context). Full output saved to ${TMPFILE}
+
+First ${PREVIEW_LINES} lines:
+${PREVIEW}
+
+Last 10 lines:
+${TAIL}
+
+Use the Read tool on ${TMPFILE} to see the full output."
+
+jq -n --arg content "$TRUNCATED" '{
+    "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "updatedMCPToolOutput": $content
+    }
+}'
