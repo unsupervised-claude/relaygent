@@ -2,8 +2,10 @@
 // Connects to Chrome on CDP_PORT (default 9223) for reliable web content clicks
 
 import http from "node:http";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const CDP_PORT = 9223;
+const CHROME_PREFS = `${process.env.HOME}/data/chrome-debug-profile/Default/Preferences`;
 
 let _ws = null;
 let _msgId = 0;
@@ -171,6 +173,16 @@ export async function cdpNavigate(url) {
 /** Disconnect cached CDP WebSocket so next getConnection() re-queries /json/list */
 export function cdpDisconnect() {
   if (_ws) { try { _ws.close(); } catch {} _ws = null; }
+}
+
+/** Reset Chrome profile exit_type to Normal so next launch skips "Restore pages?" bubble */
+export function patchChromePrefs() {
+  try {
+    const prefs = JSON.parse(readFileSync(CHROME_PREFS, "utf8"));
+    prefs.profile = { ...prefs.profile, exit_type: "Normal", exited_cleanly: true };
+    writeFileSync(CHROME_PREFS, JSON.stringify(prefs));
+    log("patched Chrome prefs: exit_type=Normal");
+  } catch (e) { log(`patchChromePrefs failed: ${e.message}`); }
 }
 
 export async function cdpAvailable() {

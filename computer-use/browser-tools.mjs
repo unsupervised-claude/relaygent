@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { hsCall, takeScreenshot } from "./hammerspoon.mjs";
-import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick, cdpDisconnect } from "./cdp.mjs";
+import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick, cdpDisconnect, patchChromePrefs } from "./cdp.mjs";
 
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
@@ -73,6 +73,7 @@ export function registerBrowserTools(server, IS_LINUX) {
       if (!new_tab && await cdpNavigate(url)) return actionRes(`Navigated to ${url}`, 1500);
       const mod = IS_LINUX ? "ctrl" : "cmd";
       const browser = IS_LINUX ? "google-chrome" : "Google Chrome";
+      if (!IS_LINUX) patchChromePrefs();  // suppress "Restore pages?" bubble after crash
       await hsCall("POST", "/launch", { app: browser });
       await new Promise(r => setTimeout(r, 300));
       await hsCall("POST", "/type", { key: new_tab ? "t" : "l", modifiers: [mod] });
