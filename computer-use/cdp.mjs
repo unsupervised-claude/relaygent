@@ -130,10 +130,17 @@ export async function cdpNavigate(url) {
   const conn = await getConnection();
   if (!conn) return false;
   try {
+    // Silently deny browser permission prompts (notifications, camera, etc.)
+    // so native Chrome dialogs never appear and block automation
+    try {
+      const origin = new URL(url).origin;
+      await send("Browser.grantPermissions", { permissions: [], origin });
+    } catch {}
     await send("Page.enable");
     const loaded = waitForEvent("Page.loadEventFired", 15000);
     await send("Page.navigate", { url });
     await loaded;
+    if (_currentTabId) await cdpActivate(_currentTabId);  // ensure Chrome visually switches to this tab
     return true;
   } catch (e) {
     log(`navigate error: ${e.message}`);

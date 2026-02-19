@@ -25,9 +25,12 @@ export const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var inVP=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<window.innerHeight&&r.right>0&&r.left<window.innerWidth};` +
   `var els=_dqa(${_textSel},ROOT).filter(function(e){return e.offsetParent!==null});` +
-  `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
-  `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
+  `var _txt=function(e){return norm(e.innerText||e.value||e.getAttribute('aria-label')||'')};` +
+  `var exact=els.filter(function(e){return _txt(e).trim()===t});` +
+  `var matches=exact.length?exact:t.length>3?els.filter(function(e){return _txt(e).includes(t)}):[];` +
   `matches.sort(function(a,b){return inVP(b)-inVP(a)});` +
+  `var modal=document.querySelector('dialog,[role=dialog],[role=alertdialog],.oo-ui-dialog');` +
+  `if(modal&&matches.some(function(e){return modal.contains(e)})){matches=matches.filter(function(e){return modal.contains(e)})}` +
   `if(!matches.length){` +
     `var allVis=[...ROOT.querySelectorAll('*')].filter(function(e){return e.offsetParent!==null&&norm(e.innerText||'').trim().includes(t)&&e.children.length===0});` +
     `allVis.forEach(function(leaf){var e=leaf;while(e&&e!==ROOT){var c=window.getComputedStyle(e).cursor;if(e.onclick||e.getAttribute('onclick')||c==='pointer'||e.getAttribute('role')||e.matches('[class*="-control"],[class*="__control"],[data-testid]')){matches.push(e);break;}e=e.parentElement;}});` +
@@ -37,7 +40,7 @@ export const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `if(el.matches('[class*="-control"],[class*="__control"]')||el.closest('[class*="-control"],[class*="__control"]')){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));}else{el.click();}` +
   `${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
-const _setSV = `var _ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');var _sv=function(e,v){if(_ns&&_ns.set)_ns.set.call(e,v);else e.value=v};`;
+const _setSV = `var _sv=function(e,v){var p=e.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;var d=Object.getOwnPropertyDescriptor(p,'value');if(d&&d.set)d.set.call(e,v);else e.value=v};`;
 export const TYPE_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);if(!el)return 'not found';` +
   `el.scrollIntoView({block:'nearest'});el.focus();` +
