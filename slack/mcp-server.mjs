@@ -142,10 +142,12 @@ server.tool("search_messages",
 			const data = await slackApi("search.messages", { query, count, sort: "timestamp", sort_dir: "desc" });
 			const matches = data.messages?.matches || [];
 			if (!matches.length) return txt("No messages found.");
-			const lines = matches.map(m => {
+			const lines = await Promise.all(matches.map(async m => {
 				const ch = m.channel?.name || m.channel?.id || "?";
-				return `[#${ch}] <${m.username || m.user}> ${m.text}`;
-			});
+				const ts = m.ts ? new Date(parseFloat(m.ts) * 1000)
+					.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }) : "";
+				return `[${ts}] [#${ch}] <${m.username || m.user}> ${await formatText(m.text)}`;
+			}));
 			return txt(lines.join("\n\n"));
 		} catch (e) { return txt(`Slack search error: ${e.message}`); }
 	}
