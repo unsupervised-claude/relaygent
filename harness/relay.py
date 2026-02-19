@@ -100,6 +100,16 @@ class RelayRunner:
                 time.sleep(5)
                 continue
 
+            if result.context_too_large:
+                log("Request too large — starting fresh session (not resuming)")
+                session_id = str(uuid.uuid4())
+                self.claude.session_id = session_id
+                session_established = False
+                incomplete_count = 0
+                resume_reason = ""
+                time.sleep(5)
+                continue
+
             if result.incomplete:
                 incomplete_count += 1
                 if incomplete_count > MAX_INCOMPLETE_RETRIES:
@@ -117,16 +127,6 @@ class RelayRunner:
                     session_established = True
                     resume_reason = "Continue where you left off."
                     time.sleep(delay)
-                continue
-
-            if result.context_too_large:
-                log("Request too large — starting fresh session (not resuming)")
-                session_id = str(uuid.uuid4())
-                self.claude.session_id = session_id
-                session_established = False
-                incomplete_count = 0
-                resume_reason = ""
-                time.sleep(5)
                 continue
 
             if result.exit_code != 0:
