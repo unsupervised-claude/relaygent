@@ -19,7 +19,7 @@ export const COORD_EXPR = (sel, frame) =>
 export const CLICK_EXPR = (sel, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame)}})()`;
 
-const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
+const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').replace(/[\\u2013\\u2014]/g,'-').toLowerCase()`;
 const _textSel = `'a,button,input[type=submit],input[type=button],summary,span,[role=button],[role=tab],[role=menuitem],[role=option],[role=link],[aria-haspopup],[role=combobox]'`;
 export const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
