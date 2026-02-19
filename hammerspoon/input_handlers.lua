@@ -90,6 +90,13 @@ function M.click(params)
         hs.timer.doAfter(0.02, function()
             postWithFlags(hs.eventtap.event.newMouseEvent(types.leftMouseUp, pt), targetApp)
         end)
+        -- AX fallback for native dialogs (TCC/security windows block CGEvent)
+        pcall(function()
+            local el = hs.axuielement.systemElementAtPosition(pt)
+            if el and el:attributeValue("AXRole") == "AXButton" then
+                el:performAction("AXPress")
+            end
+        end)
     end
     return json.encode({clicked={x=params.x, y=params.y, modifiers=params.modifiers}}), 200
 end

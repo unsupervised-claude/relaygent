@@ -111,6 +111,33 @@ local function handleRequest(method, path, headers, body)
             return dofile(hs.configdir .. "/ax_handler.lua")(params)
         elseif key == "POST /ax_press" then
             return dofile(hs.configdir .. "/ax_press.lua")(params)
+        elseif key == "POST /dismiss_dialog" then
+            local target = params.button or "Don't Allow"
+            local dialogs = {"UserNotificationCenter","SecurityAgent","System Preferences","System Settings"}
+            for _, appName in ipairs(dialogs) do
+                local app = hs.application.find(appName)
+                if app then
+                    local elem = hs.axuielement.applicationElement(app)
+                    local function findBtn(el, depth)
+                        if not el or depth > 6 then return false end
+                        for _, c in ipairs(el:attributeValue("AXChildren") or {}) do
+                            local role = c:attributeValue("AXRole") or ""
+                            local title = c:attributeValue("AXTitle") or ""
+                            if role == "AXButton" and title == target then
+                                c:performAction("AXPress"); return true
+                            end
+                            if findBtn(c, depth+1) then return true end
+                        end
+                        return false
+                    end
+                    for _, w in ipairs(elem:attributeValue("AXChildren") or {}) do
+                        if w:attributeValue("AXRole") == "AXWindow" and findBtn(w, 0) then
+                            return json.encode({dismissed=true, app=appName, button=target}), 200
+                        end
+                    end
+                end
+            end
+            return json.encode({dismissed=false, error="no dialog found"}), 404
         end
         return json.encode({error="not found", path=path}), 404
     end)
