@@ -87,7 +87,7 @@ export function setupHooks(config, REPO_DIR, HOME, C) {
 	const settingsDir = join(HOME, '.claude', 'projects', projectHash);
 	mkdirSync(settingsDir, { recursive: true });
 	const settings = {
-		env: { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "99" },
+		env: { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "95" },
 		hooks: {
 			PostToolUse: [{
 				matcher: "*",
