@@ -86,7 +86,17 @@ try:
             count = n.get('count', 0)
             src = n.get('source', 'chat')
             if src == 'slack':
-                parts.append(f'{count} unread Slack message(s)')
+                channels = n.get('channels', [])
+                previews = []
+                for ch in channels[:3]:
+                    msgs = ch.get('messages', [])
+                    if msgs:
+                        m = msgs[-1]
+                        txt = (m.get('text') or '')[:60].replace('\n',' ')
+                        ch_name = ch.get('name') or '?'
+                        previews.append('[#' + ch_name + '] ' + txt)
+                summary = str(count) + ' unread Slack' + (': ' + ' | '.join(previews) if previews else ' message(s)')
+                parts.append(summary)
             else:
                 parts.append(f'{count} unread chat message(s) — check with read_messages')
     if parts:
