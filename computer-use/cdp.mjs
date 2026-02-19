@@ -75,6 +75,7 @@ export async function getConnection() {
   try {
     _ws = await connectTab(page.webSocketDebuggerUrl);
     log(`connected to ${page.url.substring(0, 60)}`);
+    try { await send("Page.bringToFront", {}); } catch {}
     return { ws: _ws };
   } catch (e) {
     log(`connect failed: ${e.message}`);
@@ -145,6 +146,7 @@ export async function cdpNavigate(url) {
   const conn = await getConnection();
   if (!conn) return false;
   try {
+    try { await send("Page.bringToFront", {}); } catch {}
     await send("Page.enable");
     const loaded = waitForEvent("Page.loadEventFired", 15000);
     await send("Page.navigate", { url });
