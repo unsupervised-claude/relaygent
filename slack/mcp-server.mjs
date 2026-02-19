@@ -167,7 +167,8 @@ server.tool("unread", "Check channels with unread messages.", {},
 							.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
 						const user = await userName(m.user);
 						const ch = m.channel_name || m.channel || "?";
-						return `[${ts}] [#${ch}] <${user}> ${await formatText(m.text)}`;
+						const cid = m.channel ? ` (${m.channel})` : "";
+						return `[${ts}] [#${ch}${cid}] <${user}> ${await formatText(m.text)}`;
 					}));
 					ackSlack();
 					return txt(lines.join("\n"));
