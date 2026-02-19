@@ -101,7 +101,7 @@ for line in reversed(data.strip().split(chr(10))):
     if [[ -n "$FILL_PCT" ]]; then
         echo "$FILL_PCT" > "${CONTEXT_PCT_FILE}.tmp" && mv "${CONTEXT_PCT_FILE}.tmp" "$CONTEXT_PCT_FILE"
         if [[ "$FILL_PCT" -ge "$CONTEXT_THRESHOLD" ]]; then
-            CTX="$CTX | CONTEXT ${FILL_PCT}% — Wrap up: rewrite handoff.md, update working-state.md, commit KB, then stop."
+            CTX="$CTX | CONTEXT ${FILL_PCT}% — AUTO-COMPACT at 95% will erase context. Wrap up NOW: rewrite handoff.md, update working-state.md, commit KB, then stop."
         fi
     fi
 fi
