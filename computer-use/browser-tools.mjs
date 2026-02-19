@@ -44,19 +44,21 @@ const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
+// React native setter: bypasses React's overridden value setter so controlled inputs register changes
+const _setSV = `var _ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');var _sv=function(e,v){if(_ns&&_ns.set)_ns.set.call(e,v);else e.value=v};`;
 const TYPE_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);if(!el)return 'not found';` +
-  `el.focus();el.value=${JSON.stringify(text)};el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));` +
+  `el.focus();${_setSV}_sv(el,${JSON.stringify(text)});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));` +
   (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));var f=el.closest('form');if(f)f.submit();` : ``) +
   `return el.value})()`;
 
 // char-by-char with full key events for autocomplete/typeahead
 const TYPE_SLOW_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);` +
-  `if(!el)return Promise.resolve('not found');el.focus();el.value='';var t=${JSON.stringify(text)};` +
+  `if(!el)return Promise.resolve('not found');el.focus();${_setSV}_sv(el,'');var t=${JSON.stringify(text)};` +
   `return new Promise(function(res){var i=0;(function next(){if(i>=t.length){` +
   (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));var f=el.closest('form');if(f)f.submit();` : ``) +
-  `return res(el.value)}var c=t[i++];el.value+=c;` +
+  `return res(el.value)}var c=t[i++];_sv(el,el.value+c);` +
   `el.dispatchEvent(new KeyboardEvent('keydown',{key:c,bubbles:true}));el.dispatchEvent(new KeyboardEvent('keypress',{key:c,bubbles:true}));` +
   `el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new KeyboardEvent('keyup',{key:c,bubbles:true}));` +
   `setTimeout(next,20)})()})})()`;

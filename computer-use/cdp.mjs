@@ -135,11 +135,7 @@ export async function cdpClick(x, y) {
   }
 }
 
-/**
- * Like cdpEval but waits for Promises to resolve (awaitPromise: true).
- * Required for expressions that return a Promise (e.g. polling loops).
- * Note: CDP send has a 10s hard timeout — keep polling expressions under that.
- */
+/** Like cdpEval but awaits Promises. Required for TYPE_SLOW_EXPR / WAIT_EXPR. */
 export async function cdpEvalAsync(expression) {
   const conn = await getConnection();
   if (!conn) return null;
@@ -196,7 +192,3 @@ export function patchChromePrefs() {
   } catch (e) { log(`patchChromePrefs failed: ${e.message}`); }
 }
 
-export async function cdpAvailable() {
-  const tabs = await cdpHttp("/json/list");
-  return tabs !== null && Array.isArray(tabs);
-}
