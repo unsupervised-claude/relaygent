@@ -1,9 +1,7 @@
 """Sleep/wake handling using cached notifications file.
 
-The background notification-poller daemon maintains a cache file with
-merged fast (1s) + slow (30s, Slack/email) poll results. We read that
-file instead of hitting the notifications API directly, which avoids
-hammering the Slack API every second.
+Reads the background notification-poller cache instead of hitting the
+Slack/email APIs directly (avoids hammering APIs every second).
 """
 
 from __future__ import annotations
@@ -190,6 +188,9 @@ class SleepManager:
                 claude_result = claude.monitor(log_start)
                 if claude_result.timed_out:
                     return None
+            if claude_result.context_too_large:
+                log("Request too large or bad image during wake — returning for fresh session")
+                return claude_result
             if claude_result.exit_code != 0:
                 log(f"Crashed during wake (exit={claude_result.exit_code}), resuming...")
                 time.sleep(3)

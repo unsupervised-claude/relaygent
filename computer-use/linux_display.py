@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 
 logger = logging.getLogger(__name__)
-
+_ENV = {**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":99")}
 
 def _run(args, timeout=5):
-    r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=_ENV)
     return r.stdout.strip()
 
 

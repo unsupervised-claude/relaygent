@@ -191,9 +191,9 @@ class ClaudeProcess:
         try:
             with open(LOG_FILE) as f:
                 lines = f.readlines()[log_start:]
-            if any('Request too large' in l for l in lines):
+            if any('Request too large' in l or 'Could not process image' in l for l in lines):
                 context_too_large = True
-                log('Context too large — will start fresh')
+                log('Context too large or bad image — will start fresh')
         except OSError: pass
         return ClaudeResult(exit_code=self.process.returncode or 0, hung=hung, timed_out=timed_out,
             no_output=no_output, incomplete=incomplete, context_too_large=context_too_large,

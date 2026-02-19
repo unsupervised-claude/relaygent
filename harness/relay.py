@@ -101,7 +101,7 @@ class RelayRunner:
                 continue
 
             if result.context_too_large:
-                log("Request too large — starting fresh session (not resuming)")
+                log("Request too large or bad image — starting fresh session (not resuming)")
                 session_id = str(uuid.uuid4())
                 self.claude.session_id = session_id
                 session_established = False
