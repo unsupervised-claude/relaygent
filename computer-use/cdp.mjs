@@ -140,6 +140,7 @@ export async function cdpNavigate(url) {
     const loaded = waitForEvent("Page.loadEventFired", 15000);
     await send("Page.navigate", { url });
     await loaded;
+    if (_currentTabId) await cdpActivate(_currentTabId);  // ensure Chrome visually switches to this tab
     return true;
   } catch (e) {
     log(`navigate error: ${e.message}`);

@@ -15,7 +15,10 @@ export function registerBrowserTools(server, IS_LINUX) {
     { url: z.string().describe("URL to navigate to"),
       new_tab: bool.describe("Open in new tab") },
     async ({ url, new_tab }) => {
-      if (!new_tab && await cdpNavigate(url)) return actionRes(`Navigated to ${url}`, 1500);
+      if (!new_tab && await cdpNavigate(url)) {
+        await hsCall("POST", "/launch", { app: IS_LINUX ? "google-chrome" : "Google Chrome" });
+        return actionRes(`Navigated to ${url}`, 800);
+      }
       const mod = IS_LINUX ? "ctrl" : "cmd";
       const browser = IS_LINUX ? "google-chrome" : "Google Chrome";
       if (!IS_LINUX) patchChromePrefs();
