@@ -1,14 +1,10 @@
 #!/usr/bin/env node
-/**
- * Slack MCP server — channels, messages, reactions, users.
- * Uses user tokens (xoxp-) so agent acts as a real user.
- * Token from ~/.relaygent/slack/token.json.
- */
+// Slack MCP server — channels, messages, reactions, users (xoxp- user tokens)
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { join, dirname } from "path";
 import { homedir } from "os";
 import { slackApi } from "./slack-client.mjs";
 import { userName, dmName } from "./slack-helpers.mjs";
@@ -18,6 +14,9 @@ const LAST_ACK = join(homedir(), ".relaygent", "slack", ".last_check_ts");
 
 const server = new McpServer({ name: "slack", version: "1.0.0" });
 const txt = (t) => ({ content: [{ type: "text", text: t }] });
+function ackSlack() {
+	try { mkdirSync(dirname(LAST_ACK), { recursive: true }); writeFileSync(LAST_ACK, `${Date.now() / 1000}`); } catch {}
+}
 
 server.tool("channels",
 	"List Slack channels the user has joined.",
@@ -58,6 +57,7 @@ server.tool("read_messages",
 				const user = await userName(m.user || m.bot_id);
 				return `[${ts}] <${user}> ${m.text || ""}`;
 			}));
+			ackSlack();
 			return txt(lines.join("\n"));
 		} catch (e) { return txt(`Slack read error: ${e.message}`); }
 	}

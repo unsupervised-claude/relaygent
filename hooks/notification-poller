@@ -60,7 +60,7 @@ try:
         sock_notifs = [{'type':'message','source':'slack','count':len(msgs),'channels':list(by_ch.values())}]
 except: pass
 sources = {n.get('source','') for n in fast if n.get('type')=='message'}
-if sock_notifs: sources.add('slack')
+if os.path.exists(os.environ['SOCK_FILE']): sources.add('slack')
 merged = fast + sock_notifs
 merged += [n for n in slow if n.get('type')=='message' and n.get('source','') not in sources]
 print(json.dumps(merged))
