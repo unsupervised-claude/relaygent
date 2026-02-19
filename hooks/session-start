@@ -1,0 +1,34 @@
+#!/bin/bash
+# SessionStart hook: inject system orientation context automatically
+# Runs orient.sh and returns output as additionalContext so Claude
+# doesn't need to manually run it at the start of each session.
+
+INPUT=$(cat)
+SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"')
+
+# Only run on startup (not resume/compact/clear — those already have context)
+if [ "$SOURCE" != "startup" ]; then
+    exit 0
+fi
+
+# Find orient.sh relative to this hook script (lives in harness/, not hooks/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ORIENT="$SCRIPT_DIR/../harness/orient.sh"
+
+if [ ! -x "$ORIENT" ]; then
+    exit 0
+fi
+
+# Run orient.sh and capture output (strip ANSI color codes for clean context)
+ORIENT_OUTPUT=$("$ORIENT" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+
+if [ -z "$ORIENT_OUTPUT" ]; then
+    exit 0
+fi
+
+jq -n --arg ctx "$ORIENT_OUTPUT" '{
+    "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": $ctx
+    }
+}'
