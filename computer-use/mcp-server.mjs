@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { platform } from "node:os";
-import { hsCall, takeScreenshot, readScreenshot, runOsascript, findElements, clickElement, checkHealth, SCREENSHOT_PATH } from "./hammerspoon.mjs";
+import { hsCall, takeScreenshot, readScreenshot, scaleFactor, runOsascript, findElements, clickElement, checkHealth, SCREENSHOT_PATH } from "./hammerspoon.mjs";
 import { registerBrowserTools } from "./browser-tools.mjs";
 const IS_LINUX = platform() === "linux";
 
@@ -19,20 +19,24 @@ const ACTION_DELAY = 1500;
 const actionRes = async (text, delay, indicator) => ({
 	content: [{ type: "text", text }, ...await takeScreenshot(delay ?? ACTION_DELAY, indicator)]
 });
+/** Scale coordinates from image space to native screen space. */
+const sx = (v) => Math.round(v * scaleFactor());
 
 server.tool("screenshot", "Capture screenshot. Use find_elements for precise coordinates.",
 	{ x: n.optional().describe("Crop X"), y: n.optional().describe("Crop Y"),
 		w: n.optional().describe("Crop width"), h: n.optional().describe("Crop height") },
 	async ({ x, y, w, h }) => {
 		const body = { path: SCREENSHOT_PATH };
-		if (x !== null && y !== null && w !== null && h !== null) Object.assign(body, { x, y, w, h });
+		if (x !== null && y !== null && w !== null && h !== null) Object.assign(body, { x: sx(x), y: sx(y), w: sx(w), h: sx(h) });
 		const r = await hsCall("POST", "/screenshot", body);
 		if (r.error) return { content: [{ type: "text", text: JSON.stringify(r) }] };
 		try {
-			const img = readScreenshot();
+			const img = readScreenshot(r.width);
+			const sf = scaleFactor();
+			const sw = Math.round(r.width / sf), sh = Math.round(r.height / sf);
 			return { content: [
 				{ type: "image", data: img, mimeType: "image/png" },
-				{ type: "text", text: `Screenshot: ${r.width}x${r.height}px (use these coords for clicks)` },
+				{ type: "text", text: `Screenshot: ${sw}x${sh}px (use these coords for clicks)` },
 			] };
 		} catch { return { content: [{ type: "text", text: JSON.stringify(r) }] }; }
 	}
@@ -43,7 +47,7 @@ server.tool("click", "Click at coordinates. Auto-returns screenshot.",
 		right: bool.describe("Right-click"),
 		double: bool.describe("Double-click"),
 		modifiers: z.array(z.string()).optional().describe("Modifier keys: shift, cmd, alt, ctrl") },
-	async (p) => { await hsCall("POST", "/click", p); return actionRes(`Clicked (${p.x},${p.y})`, 400, {x: p.x, y: p.y}); }
+	async (p) => { const np = { ...p, x: sx(p.x), y: sx(p.y) }; await hsCall("POST", "/click", np); return actionRes(`Clicked (${p.x},${p.y})`, 400, np); }
 );
 
 server.tool("click_sequence", "Multiple clicks in one call. Auto-returns screenshot.",
@@ -55,11 +59,11 @@ server.tool("click_sequence", "Multiple clicks in one call. Auto-returns screens
 	})).describe("Array of clicks") },
 	async ({ clicks }) => {
 		for (const c of clicks) {
-			await hsCall("POST", "/click", { x: c.x, y: c.y, right: c.right, double: c.double, modifiers: c.modifiers });
+			await hsCall("POST", "/click", { x: sx(c.x), y: sx(c.y), right: c.right, double: c.double, modifiers: c.modifiers });
 			await new Promise(r => setTimeout(r, c.delay ?? 300));
 		}
 		const l = clicks[clicks.length - 1];
-		return actionRes(`Clicked ${clicks.length} points`, 400, {x: l.x, y: l.y});
+		return actionRes(`Clicked ${clicks.length} points`, 400, {x: sx(l.x), y: sx(l.y)});
 	}
 );
 
@@ -69,7 +73,8 @@ server.tool("drag", "Drag from one point to another. Auto-returns screenshot.",
 		steps: n.optional().describe("Interpolation steps (default: 10)"),
 		duration: n.optional().describe("Duration secs (default: 0.3)") },
 	async (p) => {
-		await hsCall("POST", "/drag", p);
+		const np = { ...p, startX: sx(p.startX), startY: sx(p.startY), endX: sx(p.endX), endY: sx(p.endY) };
+		await hsCall("POST", "/drag", np);
 		return actionRes(`Dragged (${p.startX},${p.startY}) to (${p.endX},${p.endY})`, ((p.duration||0.3)+0.15)*1000);
 	}
 );
@@ -103,7 +108,7 @@ server.tool("scroll", "Scroll at position. Use repeat for long scrolling. Auto-r
 		repeat: n.optional().describe("Number of scroll events (default: 1)") },
 	async ({ x, y, direction, amount, repeat: reps }) => {
 		const scrollAmt = (amount || 3) * (direction === "up" ? -1 : 1);
-		await hsCall("POST", "/scroll", { x, y, amount: scrollAmt, repeat: reps || 1 });
+		await hsCall("POST", "/scroll", { x: x != null ? sx(x) : x, y: y != null ? sx(y) : y, amount: scrollAmt, repeat: reps || 1 });
 		return actionRes(`Scrolled ${direction || "down"} x${reps || 1}`, ((reps||1)-1)*50+200);
 	}
 );
@@ -129,7 +134,7 @@ server.tool("apps", "List running applications", {},
 	async () => jsonRes(await hsCall("GET", "/apps")));
 server.tool("element_at", "Get UI element info at screen coordinates",
 	{ x: n.describe("X"), y: n.describe("Y") },
-	async (p) => jsonRes(await hsCall("POST", "/element_at", p)));
+	async (p) => jsonRes(await hsCall("POST", "/element_at", { x: sx(p.x), y: sx(p.y) })));
 server.tool("accessibility_tree", "Get accessibility tree of focused or named app",
 	{ app: z.string().optional().describe("App name (default: frontmost)"),
 		depth: n.optional().describe("Max tree depth (default: 4)") },

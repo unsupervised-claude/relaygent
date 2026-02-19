@@ -14,20 +14,27 @@ let tail = Promise.resolve();
 const SCREENSHOT_PATH = "/tmp/claude-screenshot.png";
 const SCALED_PATH = "/tmp/claude-screenshot-scaled.png";
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB — well under Claude's 20MB base64 limit
-const MAX_DIM = 1280; // max width/height when downscaling
+const SCALED_WIDTH = 1280; // Always downscale to this width for consistent vision coords
 
-/** Read screenshot, downscaling if it exceeds MAX_BYTES. Returns base64 string. */
-export function readScreenshot() {
+// Scale factor: native screen pixels / scaled image pixels.
+// Set after first screenshot — click coords are multiplied by this before execution.
+let _scaleFactor = 1;
+export function scaleFactor() { return _scaleFactor; }
+
+/** Read screenshot, always downscaling to SCALED_WIDTH for vision accuracy. Returns base64. */
+export function readScreenshot(nativeWidth) {
 	try {
-		const size = statSync(SCREENSHOT_PATH).size;
-		if (size <= MAX_BYTES) return readFileSync(SCREENSHOT_PATH).toString("base64");
-		// Downscale using sips (macOS) or convert (Linux/ImageMagick)
-		if (IS_LINUX) {
-			execFileSync("convert", [SCREENSHOT_PATH, "-resize", `${MAX_DIM}x${MAX_DIM}>`, SCALED_PATH], { timeout: 5000 });
-		} else {
-			execFileSync("sips", ["-Z", String(MAX_DIM), "--out", SCALED_PATH, SCREENSHOT_PATH], { timeout: 5000 });
+		if (nativeWidth && nativeWidth > SCALED_WIDTH) {
+			_scaleFactor = nativeWidth / SCALED_WIDTH;
+			if (IS_LINUX) {
+				execFileSync("python3", ["-c", `from PIL import Image;i=Image.open("${SCREENSHOT_PATH}");i.resize((${SCALED_WIDTH},int(i.height*${SCALED_WIDTH}/i.width)),Image.LANCZOS).save("${SCALED_PATH}")`], { timeout: 5000 });
+			} else {
+				execFileSync("sips", ["-Z", String(SCALED_WIDTH), "--out", SCALED_PATH, SCREENSHOT_PATH], { timeout: 5000 });
+			}
+			return readFileSync(SCALED_PATH).toString("base64");
 		}
-		return readFileSync(SCALED_PATH).toString("base64");
+		_scaleFactor = 1;
+		return readFileSync(SCREENSHOT_PATH).toString("base64");
 	} catch {
 		return readFileSync(SCREENSHOT_PATH).toString("base64");
 	}
@@ -88,11 +95,13 @@ export async function takeScreenshot(delayMs = 300, indicator) {
 	const r = await hsCall("POST", "/screenshot", body);
 	if (r.error) return [{ type: "text", text: `(screenshot failed: ${r.error})` }];
 	try {
-		const img = readScreenshot();
-		if (!img) return [{ type: "text", text: `(screenshot empty)` }];
+		const img = readScreenshot(r.width);
+		if (!img) return [{ type: "text", text: "(screenshot empty)" }];
+		const sf = scaleFactor();
+		const sw = Math.round(r.width / sf), sh = Math.round(r.height / sf);
 		return [
 			{ type: "image", data: img, mimeType: "image/png" },
-			{ type: "text", text: `Screenshot: ${r.width}x${r.height}px (use these coords for clicks)` },
+			{ type: "text", text: `Screenshot: ${sw}x${sh}px (use these coords for clicks)` },
 		];
 	} catch (e) { return [{ type: "text", text: `(screenshot read failed: ${e.message})` }]; }
 }
