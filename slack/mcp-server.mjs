@@ -128,10 +128,11 @@ server.tool("search_messages",
 			const matches = data.messages?.matches || [];
 			if (!matches.length) return txt("No messages found.");
 			const lines = await Promise.all(matches.map(async m => {
-				const ch = m.channel?.name || m.channel?.id || "?";
+				const chName = m.channel?.name || "?";
+				const chId = m.channel?.id ? ` (${m.channel.id})` : "";
 				const ts = m.ts ? new Date(parseFloat(m.ts) * 1000)
 					.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }) : "";
-				return `[${ts}] [#${ch}] <${m.username || m.user}> ${await formatText(m.text)}`;
+				return `[${ts}] (ts:${m.ts}) [#${chName}${chId}] <${m.username || m.user}> ${await formatText(m.text)}`;
 			}));
 			return txt(lines.join("\n\n"));
 		} catch (e) { return txt(`Slack search error: ${e.message}`); }
