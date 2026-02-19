@@ -12,6 +12,17 @@ let _events = [];  // one-shot CDP event listeners [{method, cb}]
 
 function log(msg) { process.stderr.write(`[cdp] ${msg}\n`); }
 
+/** Activate a tab via Chrome HTTP endpoint — actually switches visible tab (unlike Page.bringToFront) */
+async function cdpActivate(tabId) {
+  return new Promise(resolve => {
+    const req = http.request({ hostname: "localhost", port: CDP_PORT, path: `/json/activate/${tabId}`, timeout: 2000 }, res => {
+      res.on("data", () => {}); res.on("end", () => resolve(res.statusCode === 200));
+    });
+    req.on("error", () => resolve(false));
+    req.end();
+  });
+}
+
 async function cdpHttp(path) {
   return new Promise(resolve => {
     const req = http.request({ hostname: "localhost", port: CDP_PORT, path, timeout: 3000 }, res => {
@@ -75,7 +86,7 @@ export async function getConnection() {
   try {
     _ws = await connectTab(page.webSocketDebuggerUrl);
     log(`connected to ${page.url.substring(0, 60)}`);
-    try { await send("Page.bringToFront", {}); } catch {}
+    await cdpActivate(page.id);  // switch visible tab so screenshots match CDP tab
     return { ws: _ws };
   } catch (e) {
     log(`connect failed: ${e.message}`);
@@ -146,7 +157,6 @@ export async function cdpNavigate(url) {
   const conn = await getConnection();
   if (!conn) return false;
   try {
-    try { await send("Page.bringToFront", {}); } catch {}
     await send("Page.enable");
     const loaded = waitForEvent("Page.loadEventFired", 15000);
     await send("Page.navigate", { url });
