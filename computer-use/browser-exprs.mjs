@@ -25,8 +25,9 @@ export const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var inVP=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<window.innerHeight&&r.right>0&&r.left<window.innerWidth};` +
   `var els=_dqa(${_textSel},ROOT).filter(function(e){return e.offsetParent!==null});` +
-  `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
-  `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
+  `var _txt=function(e){return norm(e.innerText||e.value||e.getAttribute('aria-label')||'')};` +
+  `var exact=els.filter(function(e){return _txt(e).trim()===t});` +
+  `var matches=exact.length?exact:t.length>3?els.filter(function(e){return _txt(e).includes(t)}):[];` +
   `matches.sort(function(a,b){return inVP(b)-inVP(a)});` +
   `var modal=document.querySelector('dialog,[role=dialog],[role=alertdialog],.oo-ui-dialog');` +
   `if(modal&&matches.some(function(e){return modal.contains(e)})){matches=matches.filter(function(e){return modal.contains(e)})}` +
