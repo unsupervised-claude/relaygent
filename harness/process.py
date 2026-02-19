@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from config import CONTEXT_THRESHOLD, HANG_CHECK_DELAY, LOG_FILE, PROMPT_FILE, SILENCE_TIMEOUT, Timer, log
+from jsonl_checks import check_incomplete_exit, get_context_fill_from_jsonl, get_jsonl_size
 
 def _configured_model() -> str | None:
     """Read model from ~/.relaygent/config.json, or None for default."""
@@ -15,13 +16,17 @@ def _configured_model() -> str | None:
         return json.loads((Path.home() / ".relaygent" / "config.json").read_text()).get("model")
     except (OSError, json.JSONDecodeError, KeyError):
         return None
-from jsonl_checks import (
-    check_incomplete_exit,
-    get_context_fill_from_jsonl,
-    get_jsonl_size,
-)
 
 CONTEXT_PCT_FILE = Path("/tmp/relaygent-context-pct")
+_HARNESS = Path(__file__).parent
+
+
+def _ensure_settings() -> Path:
+    """Generate settings.json from template, substituting RELAYGENT_DIR."""
+    tmpl, dest = _HARNESS / "settings.json.template", _HARNESS / "settings.json"
+    if tmpl.exists() and (not dest.exists() or tmpl.stat().st_mtime > dest.stat().st_mtime):
+        dest.write_text(tmpl.read_text().replace("RELAYGENT_DIR", str(_HARNESS.parent)))
+    return dest
 
 
 @dataclass
@@ -90,7 +95,7 @@ class ClaudeProcess:
     def start_fresh(self) -> int:
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
-        settings_file = str(Path(__file__).parent / "settings.json")
+        settings_file = str(_ensure_settings())
         try:
             with open(PROMPT_FILE) as stdin:
                 self.process = subprocess.Popen(
@@ -108,7 +113,7 @@ class ClaudeProcess:
         self._context_warning_sent = False
         log_start = self._get_log_lines()
         self._log_file = self._open_log()
-        settings_file = str(Path(__file__).parent / "settings.json")
+        settings_file = str(_ensure_settings())
         cmd = ["claude", "--resume", self.session_id,
                "--print", "--dangerously-skip-permissions", "--settings", settings_file,
                *self._model_args()]
