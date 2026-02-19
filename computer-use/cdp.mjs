@@ -11,32 +11,27 @@ let _ws = null;
 let _msgId = 0;
 let _pending = new Map();
 let _events = [];  // one-shot CDP event listeners [{method, cb}]
+let _currentTabId = null;  // track which tab CDP is connected to
 
 function log(msg) { process.stderr.write(`[cdp] ${msg}\n`); }
 
-/** Activate a tab via Chrome HTTP endpoint — actually switches visible tab (unlike Page.bringToFront) */
-async function cdpActivate(tabId) {
-  return new Promise(resolve => {
-    const req = http.request({ hostname: "localhost", port: CDP_PORT, path: `/json/activate/${tabId}`, timeout: 2000 }, res => {
-      res.on("data", () => {}); res.on("end", () => resolve(res.statusCode === 200));
-    });
-    req.on("error", () => resolve(false));
-    req.end();
+const cdpActivate = (tabId) => new Promise(resolve => {
+  const req = http.request({ hostname: "localhost", port: CDP_PORT, path: `/json/activate/${tabId}`, timeout: 2000 }, res => {
+    res.on("data", () => {}); res.on("end", () => resolve(res.statusCode === 200));
   });
-}
+  req.on("error", () => resolve(false)); req.end();
+});
 
-async function cdpHttp(path) {
-  return new Promise(resolve => {
-    const req = http.request({ hostname: "localhost", port: CDP_PORT, path, timeout: 3000 }, res => {
-      const chunks = [];
-      res.on("data", c => chunks.push(c));
-      res.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks))); } catch { resolve(null); } });
-    });
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => { req.destroy(); resolve(null); });
-    req.end();
+const cdpHttp = (path) => new Promise(resolve => {
+  const req = http.request({ hostname: "localhost", port: CDP_PORT, path, timeout: 3000 }, res => {
+    const chunks = [];
+    res.on("data", c => chunks.push(c));
+    res.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks))); } catch { resolve(null); } });
   });
-}
+  req.on("error", () => resolve(null));
+  req.on("timeout", () => { req.destroy(); resolve(null); });
+  req.end();
+});
 
 async function connectTab(wsUrl) {
   return new Promise((resolve, reject) => {
@@ -79,7 +74,6 @@ function waitForEvent(method, timeoutMs = 10000) {
 
 export async function getConnection() {
   if (_ws && _ws.readyState === 1) {
-    // Health check: verify connection is alive (catches stale connections after Chrome crash)
     try {
       const r = await Promise.race([
         send("Runtime.evaluate", { expression: "1", returnByValue: true }),
@@ -92,22 +86,18 @@ export async function getConnection() {
   }
   const tabs = await cdpHttp("/json/list");
   if (!tabs) return null;
-  // Prefer http/https pages over chrome:// internal pages (e.g. omnibox popup)
-  const page = tabs.find(t => t.type === "page" && t.webSocketDebuggerUrl && /^https?:/.test(t.url))
-    ?? tabs.find(t => t.type === "page" && t.webSocketDebuggerUrl);
-  if (!page) return null;
+  const pages = tabs.filter(t => t.type === "page" && t.webSocketDebuggerUrl);
+  if (!pages.length) return null;
+  const page = pages.find(t => t.id === _currentTabId)
+    ?? pages.find(t => /^https?:/.test(t.url)) ?? pages[0];
   try {
     _ws = await connectTab(page.webSocketDebuggerUrl);
+    _currentTabId = page.id;
     log(`connected to ${page.url.substring(0, 60)}`);
-    await cdpActivate(page.id);  // switch visible tab so screenshots match CDP tab
     return { ws: _ws };
-  } catch (e) {
-    log(`connect failed: ${e.message}`);
-    return null;
-  }
+  } catch (e) { log(`connect failed: ${e.message}`); return null; }
 }
 
-/** Click at screen (x,y) — converts to viewport coords via window.screenX/Y. Returns true on success. */
 export async function cdpClick(x, y) {
   const conn = await getConnection();
   if (!conn) return false;
@@ -117,50 +107,24 @@ export async function cdpClick(x, y) {
       returnByValue: true,
     });
     const pos = JSON.parse(posResult?.result?.result?.value || "{}");
-    const vx = Math.round(x - (pos.x || 0));
-    const vy = Math.round(y - (pos.y || 0) - (pos.ch || 87));
+    const vx = Math.round(x - (pos.x || 0)), vy = Math.round(y - (pos.y || 0) - (pos.ch || 87));
     log(`click screen(${x},${y}) → viewport(${vx},${vy})`);
-    for (const type of ["mousePressed", "mouseReleased"]) {
+    for (const type of ["mousePressed", "mouseReleased"])
       await send("Input.dispatchMouseEvent", { type, x: vx, y: vy, button: "left", clickCount: 1 });
-    }
     return true;
-  } catch (e) {
-    log(`click error: ${e.message}`);
-    _ws = null;
-    return false;
-  }
+  } catch (e) { log(`click error: ${e.message}`); _ws = null; return false; }
 }
 
-/**
- * Like cdpEval but waits for Promises to resolve (awaitPromise: true).
- * Required for expressions that return a Promise (e.g. polling loops).
- * Note: CDP send has a 10s hard timeout — keep polling expressions under that.
- */
-export async function cdpEvalAsync(expression) {
+async function _eval(expression, awaitPromise = false) {
   const conn = await getConnection();
   if (!conn) return null;
   try {
-    const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+    const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise });
     return result?.result?.result?.value ?? null;
-  } catch (e) {
-    log(`evalAsync error: ${e.message}`);
-    _ws = null;
-    return null;
-  }
+  } catch (e) { log(`eval error: ${e.message}`); _ws = null; return null; }
 }
-
-export async function cdpEval(expression) {
-  const conn = await getConnection();
-  if (!conn) return null;
-  try {
-    const result = await send("Runtime.evaluate", { expression, returnByValue: true });
-    return result?.result?.result?.value ?? null;
-  } catch (e) {
-    log(`eval error: ${e.message}`);
-    _ws = null;
-    return null;
-  }
-}
+export const cdpEval = (expr) => _eval(expr);
+export const cdpEvalAsync = (expr) => _eval(expr, true);
 
 export async function cdpNavigate(url) {
   const conn = await getConnection();
@@ -180,6 +144,22 @@ export async function cdpNavigate(url) {
 /** Disconnect cached CDP WebSocket so next getConnection() re-queries /json/list */
 export function cdpDisconnect() {
   if (_ws) { try { _ws.close(); } catch {} _ws = null; }
+  _currentTabId = null;
+}
+
+/** After keyboard navigation, find and activate the tab Chrome just loaded. */
+export async function cdpSyncToVisibleTab(url) {
+  cdpDisconnect();
+  await new Promise(r => setTimeout(r, 800));
+  const tabs = await cdpHttp("/json/list");
+  if (!tabs) return;
+  const pages = tabs.filter(t => t.type === "page" && t.webSocketDebuggerUrl);
+  const target = pages.find(t => t.url === url || t.url.startsWith(url.replace(/\/$/, "")))
+    ?? pages.find(t => /^https?:/.test(t.url)) ?? pages[0];
+  if (!target) return;
+  _currentTabId = target.id;
+  await cdpActivate(target.id);
+  log(`synced to tab: ${target.url.substring(0, 60)}`);
 }
 
 /** Reset Chrome profile exit_type to Normal so next launch skips "Restore pages?" bubble */

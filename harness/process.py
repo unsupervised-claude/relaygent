@@ -32,6 +32,7 @@ class ClaudeResult:
     timed_out: bool = False
     no_output: bool = False
     incomplete: bool = False
+    context_too_large: bool = False
     context_pct: float = 0.0
 
 class ClaudeProcess:
@@ -69,21 +70,18 @@ class ClaudeProcess:
         if not self.process or self.process.poll() is not None: return
         log("Terminating Claude process...")
         self.process.terminate()
-        try:
-            self.process.wait(timeout=5); return
-        except subprocess.TimeoutExpired: log("Graceful terminate failed, killing...")
+        try: self.process.wait(timeout=5); return
+        except subprocess.TimeoutExpired: pass
         self.process.kill()
         try: self.process.wait(timeout=10)
-        except subprocess.TimeoutExpired: log("WARNING: Process did not die after kill"); self.process = None
+        except subprocess.TimeoutExpired: log("WARNING: Process did not die"); self.process = None
 
     def _close_log(self):
         if self._log_file and not self._log_file.closed: self._log_file.close()
         self._log_file = None
 
     def _open_log(self):
-        self._close_log()
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        return open(LOG_FILE, "a")
+        self._close_log(); LOG_FILE.parent.mkdir(parents=True, exist_ok=True); return open(LOG_FILE, "a")
 
     def _model_args(self) -> list[str]:
         m = _configured_model()
@@ -96,19 +94,13 @@ class ClaudeProcess:
         try:
             with open(PROMPT_FILE) as stdin:
                 self.process = subprocess.Popen(
-                    ["claude",
-                     "--print", "--dangerously-skip-permissions",
-                     "--settings", settings_file,
-                     "--session-id", self.session_id,
+                    ["claude", "--print", "--dangerously-skip-permissions",
+                     "--settings", settings_file, "--session-id", self.session_id,
                      *self._model_args()],
-                    stdin=stdin,
-                    stdout=self._log_file,
-                    stderr=subprocess.STDOUT,
-                    cwd=str(self.workspace),
-                )
+                    stdin=stdin, stdout=self._log_file,
+                    stderr=subprocess.STDOUT, cwd=str(self.workspace))
         except OSError:
-            self._close_log()
-            raise
+            self._close_log(); raise
         return log_start
 
     def resume(self, message: str) -> int:
@@ -125,17 +117,15 @@ class ClaudeProcess:
                 cmd, stdin=subprocess.PIPE, stdout=self._log_file,
                 stderr=subprocess.STDOUT, cwd=str(self.workspace))
         except OSError:
-            self._close_log()
-            raise
+            self._close_log(); raise
         try:
             if self.process.stdin and not self.process.stdin.closed:
                 self.process.stdin.write(message.encode())
                 self.process.stdin.flush()
                 self.process.stdin.close()
-            else:
-                log("WARNING: stdin unavailable (process may have exited)")
+            else: log("WARNING: stdin unavailable")
         except (BrokenPipeError, OSError) as e:
-            log(f"WARNING: Could not write to Claude stdin: {e}")
+            log(f"WARNING: Could not write to stdin: {e}")
         return log_start
 
     def monitor(self, log_start: int) -> ClaudeResult:
@@ -184,16 +174,22 @@ class ClaudeProcess:
             time.sleep(sleep_s)
 
         if self.process.poll() is None:
-            try:
-                self.process.wait(timeout=30)
+            try: self.process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                log("WARNING: Process stuck after monitor, force killing")
+                log("WARNING: Process stuck, force killing")
                 self.process.kill()
-                try:
-                    self.process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    log("WARNING: Process did not die after kill")
+                try: self.process.wait(timeout=10)
+                except subprocess.TimeoutExpired: log("WARNING: Process did not die")
         no_output = get_jsonl_size(self.session_id, self.workspace) == initial_jsonl_size
         incomplete, _ = check_incomplete_exit(self.session_id, self.workspace)
+        context_too_large = False
+        try:
+            with open(LOG_FILE) as f:
+                lines = f.readlines()[log_start:]
+            if any('Request too large' in l for l in lines):
+                context_too_large = True
+                log('Context too large — will start fresh')
+        except OSError: pass
         return ClaudeResult(exit_code=self.process.returncode or 0, hung=hung, timed_out=timed_out,
-            no_output=no_output, incomplete=incomplete, context_pct=self.get_context_fill())
+            no_output=no_output, incomplete=incomplete, context_too_large=context_too_large,
+            context_pct=self.get_context_fill())

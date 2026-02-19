@@ -119,6 +119,16 @@ class RelayRunner:
                     time.sleep(delay)
                 continue
 
+            if result.context_too_large:
+                log("Request too large — starting fresh session (not resuming)")
+                session_id = str(uuid.uuid4())
+                self.claude.session_id = session_id
+                session_established = False
+                incomplete_count = 0
+                resume_reason = ""
+                time.sleep(5)
+                continue
+
             if result.exit_code != 0:
                 set_status("crashed")
                 crash_count += 1

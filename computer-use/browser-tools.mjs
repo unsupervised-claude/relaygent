@@ -1,7 +1,7 @@
 // Browser automation tools via CDP — registers browser_navigate, browser_eval, browser_coords, etc.
 import { z } from "zod";
 import { hsCall, takeScreenshot, scaleFactor } from "./hammerspoon.mjs";
-import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick, cdpDisconnect, patchChromePrefs } from "./cdp.mjs";
+import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick, cdpDisconnect, cdpSyncToVisibleTab, patchChromePrefs } from "./cdp.mjs";
 
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
 const actionRes = async (text, delay) => ({ content: [{ type: "text", text }, ...await takeScreenshot(delay ?? 1500)] });
@@ -90,7 +90,8 @@ export function registerBrowserTools(server, IS_LINUX) {
       await hsCall("POST", "/type", { text: url });
       await new Promise(r => setTimeout(r, 100));
       await hsCall("POST", "/type", { key: "return" });
-      if (new_tab) cdpDisconnect();  // force reconnect to new tab on next CDP call
+      // Sync CDP to the tab Chrome just navigated to (keyboard fallback changes visible tab but CDP stays on old one)
+      await cdpSyncToVisibleTab(url);
       return actionRes(`Navigated to ${url}`, 1500);
     }
   );
