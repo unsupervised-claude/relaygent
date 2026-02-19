@@ -29,18 +29,18 @@ const retCoords = (frame, extra = ``) =>
 const COORD_EXPR = (sel, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var S=${JSON.stringify(sel)};${_vis}if(!el)return null;${retCoords(frame)}})()`;
 const CLICK_EXPR = (sel, frame) =>
-  `(function(){${_deep}var ROOT=${frameRoot(frame)};var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.click();${retCoords(frame)}})()`;
+  `(function(){${_deep}var ROOT=${frameRoot(frame)};var S=${JSON.stringify(sel)};${_vis}if(!el)return null;el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame)}})()`;
 
 // Normalize nbsp/curly-quotes; exact match preferred over substring for text-based clicks
 const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
-const _textSel = `'a,button,input[type=submit],input[type=button],[role=button]'`;
+const _textSel = `'a,button,input[type=submit],input[type=button],summary,[role=button],[role=tab],[role=menuitem],[role=option],[role=link]'`;
 const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var els=_dqa(${_textSel},ROOT).filter(function(e){return e.offsetParent!==null});` +
   `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
-  `var matches=exact.length?exact:els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)});` +
+  `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
-  `el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
+  `el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
 const TYPE_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);if(!el)return 'not found';` +
