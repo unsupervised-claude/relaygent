@@ -162,10 +162,14 @@ server.tool("unread", "Check channels with unread messages.", {},
 				const sock = JSON.parse(readFileSync(SOCKET_CACHE, "utf-8"));
 				const msgs = (sock.messages || []).filter(m => parseFloat(m.ts || "0") > ackTs);
 				if (msgs.length > 0) {
-					const byCh = msgs.reduce((a, m) => {
-						const c = m.channel || "?"; a[c] = a[c] || { name: m.channel_name || c, count: 0 }; a[c].count++; return a;
-					}, {});
-					return txt(Object.values(byCh).map(c => `${c.name}: ${c.count} unread`).join("\n"));
+					const lines = await Promise.all(msgs.map(async m => {
+						const ts = new Date(parseFloat(m.ts) * 1000)
+							.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
+						const user = await userName(m.user);
+						const ch = m.channel_name || m.channel || "?";
+						return `[${ts}] [#${ch}] <${user}> ${await formatText(m.text)}`;
+					}));
+					return txt(lines.join("\n"));
 				}
 				return txt("No unread messages.");
 			}
