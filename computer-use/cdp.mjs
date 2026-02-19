@@ -76,7 +76,18 @@ function waitForEvent(method, timeoutMs = 10000) {
 }
 
 export async function getConnection() {
-  if (_ws && _ws.readyState === 1) return { ws: _ws };
+  if (_ws && _ws.readyState === 1) {
+    // Health check: verify connection is alive (catches stale connections after Chrome crash)
+    try {
+      const r = await Promise.race([
+        send("Runtime.evaluate", { expression: "1", returnByValue: true }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("health timeout")), 2000)),
+      ]);
+      if (r?.result?.result?.value === 1) return { ws: _ws };
+    } catch {}
+    log("health check failed, reconnecting");
+    try { _ws.close(); } catch {} _ws = null;
+  }
   const tabs = await cdpHttp("/json/list");
   if (!tabs) return null;
   // Prefer http/https pages over chrome:// internal pages (e.g. omnibox popup)
