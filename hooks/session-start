@@ -11,8 +11,18 @@ if [ "$SOURCE" != "startup" ]; then
     exit 0
 fi
 
-# Find orient.sh relative to this hook script (lives in harness/, not hooks/)
+# Auto-reload MCP servers if repo HEAD changed since last session
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$SCRIPT_DIR/.."
+HEAD_FILE="/tmp/relaygent-last-head"
+CURRENT_HEAD=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null)
+LAST_HEAD=$(cat "$HEAD_FILE" 2>/dev/null)
+if [[ -n "$CURRENT_HEAD" && "$CURRENT_HEAD" != "$LAST_HEAD" ]]; then
+    pkill -f "node.*relaygent.*mcp-server" 2>/dev/null || true
+    echo "$CURRENT_HEAD" > "$HEAD_FILE"
+fi
+
+# Find orient.sh relative to this hook script (lives in harness/, not hooks/)
 ORIENT="$SCRIPT_DIR/../harness/orient.sh"
 
 if [ ! -x "$ORIENT" ]; then
