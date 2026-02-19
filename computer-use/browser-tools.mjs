@@ -38,7 +38,7 @@ const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var els=_dqa(${_textSel},ROOT).filter(function(e){return e.offsetParent!==null});` +
   `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
-  `var matches=exact.length?exact:els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)});` +
+  `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
@@ -133,8 +133,8 @@ export function registerBrowserTools(server, IS_LINUX) {
   );
 
   server.tool("browser_click_text",
-    "Click a visible element by its text content (links, buttons). Safer than browser_click when multiple elements share a selector. Auto-returns screenshot.",
-    { text: z.string().describe("Text to search for (case-insensitive contains match)"),
+    "Click a visible element by its text content (links, buttons). Exact match preferred; substring fallback for text >3 chars. Auto-returns screenshot.",
+    { text: z.string().describe("Text to find (exact match; substring fallback only if >3 chars)"),
       index: z.coerce.number().optional().describe("Which match to click if multiple (default: 0)"),
       frame: z.coerce.number().optional().describe("iframe index (window.frames[N]) to search inside") },
     async ({ text, index = 0, frame }) => {
