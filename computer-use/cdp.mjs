@@ -107,11 +107,7 @@ export async function getConnection() {
   }
 }
 
-/**
- * Click at screen (x, y) via Input.dispatchMouseEvent.
- * Converts screen coords → viewport coords using window.screenX/Y.
- * Returns true on success, false if CDP unavailable.
- */
+/** Click at screen (x,y) — converts to viewport coords via window.screenX/Y. Returns true on success. */
 export async function cdpClick(x, y) {
   const conn = await getConnection();
   if (!conn) return false;
