@@ -138,11 +138,19 @@ async function start() {
     const channelId = event.channel || body?.event?.channel;
     if (!channelId) return;
 
-    // Look up channel name
+    // Look up channel name (resolve DMs to user display names)
     let channelName = channelId;
     try {
       const info = await web.conversations.info({ channel: channelId });
-      channelName = info.channel?.name || info.channel?.id || channelId;
+      const ch = info.channel;
+      if (ch?.is_im && ch?.user) {
+        try {
+          const u = await web.users.info({ user: ch.user });
+          channelName = `DM: ${u.user?.real_name || u.user?.name || ch.user}`;
+        } catch { channelName = `DM: ${ch.user}`; }
+      } else {
+        channelName = ch?.name || ch?.id || channelId;
+      }
     } catch { /* use ID as fallback */ }
 
     const cache = readCache();

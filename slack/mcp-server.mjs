@@ -18,22 +18,16 @@ function ackSlack() {
 	try { mkdirSync(dirname(LAST_ACK), { recursive: true }); writeFileSync(LAST_ACK, `${Date.now() / 1000}`); } catch {}
 }
 
-server.tool("channels",
-	"List Slack channels the user has joined.",
+server.tool("channels", "List Slack channels the user has joined.",
 	{ limit: z.number().default(100).describe("Max channels to return"),
-	  types: z.string().default("public_channel,private_channel,mpim,im")
-		.describe("Channel types (public_channel,private_channel,mpim,im)") },
+	  types: z.string().default("public_channel,private_channel,mpim,im").describe("Channel types") },
 	async ({ limit, types }) => {
 		try {
-			const data = await slackApi("conversations.list", { limit, types, exclude_archived: true });
-			const lines = await Promise.all((data.channels || []).map(async c => {
-				const label = await dmName(c);
-				return `${label} (${c.id})` +
-					(c.is_im || c.is_mpim ? "" : ` — ${c.num_members || 0} members`) +
-					(c.topic?.value ? ` — ${c.topic.value}` : "");
-			}));
-			if (!lines.length) return txt("No channels found.");
-			return txt(lines.join("\n"));
+			const { channels = [] } = await slackApi("conversations.list", { limit, types, exclude_archived: true });
+			const lines = await Promise.all(channels.map(async c =>
+				`${await dmName(c)} (${c.id})${c.is_im || c.is_mpim ? "" : ` — ${c.num_members || 0} members`}${c.topic?.value ? ` — ${c.topic.value}` : ""}`
+			));
+			return txt(lines.length ? lines.join("\n") : "No channels found.");
 		} catch (e) { return txt(`Slack channels error: ${e.message}`); }
 	}
 );
@@ -92,19 +86,14 @@ server.tool("react",
 	}
 );
 
-server.tool("users",
-	"List users in the Slack workspace.",
+server.tool("users", "List users in the Slack workspace.",
 	{ limit: z.number().default(100).describe("Max users to return") },
 	async ({ limit }) => {
 		try {
-			const data = await slackApi("users.list", { limit });
-			const users = (data.members || []).filter(u => !u.deleted && !u.is_bot && u.id !== "USLACKBOT");
-			const lines = users.map(u =>
-				`${u.real_name || u.name} (@${u.name}, ${u.id})` +
-				(u.profile?.status_text ? ` — ${u.profile.status_text}` : "")
-			);
-			if (!lines.length) return txt("No users found.");
-			return txt(lines.join("\n"));
+			const { members = [] } = await slackApi("users.list", { limit });
+			const lines = members.filter(u => !u.deleted && !u.is_bot && u.id !== "USLACKBOT")
+				.map(u => `${u.real_name || u.name} (@${u.name}, ${u.id})${u.profile?.status_text ? ` — ${u.profile.status_text}` : ""}`);
+			return txt(lines.length ? lines.join("\n") : "No users found.");
 		} catch (e) { return txt(`Slack users error: ${e.message}`); }
 	}
 );
@@ -117,17 +106,13 @@ server.tool("channel_info",
 			const data = await slackApi("conversations.info", { channel });
 			const c = data.channel;
 			const label = await dmName(c);
-			const lines = [
-				`Name: ${label}`, `ID: ${c.id}`,
-				`Type: ${c.is_im ? "DM" : c.is_mpim ? "Group DM" : c.is_private ? "Private" : "Public"}`,
+			const type = c.is_im ? "DM" : c.is_mpim ? "Group DM" : c.is_private ? "Private" : "Public";
+			const lines = [`Name: ${label}`, `ID: ${c.id}`, `Type: ${type}`,
+				...(!c.is_im ? [`Topic: ${c.topic?.value || "(none)"}`, `Purpose: ${c.purpose?.value || "(none)"}`] : []),
+				`Members: ${c.num_members || (c.is_im ? 2 : 0)}`,
+				`Created: ${new Date(c.created * 1000).toISOString()}`,
+				...(!c.is_im ? [`Archived: ${c.is_archived}`] : []),
 			];
-			if (!c.is_im) {
-				lines.push(`Topic: ${c.topic?.value || "(none)"}`);
-				lines.push(`Purpose: ${c.purpose?.value || "(none)"}`);
-			}
-			lines.push(`Members: ${c.num_members || (c.is_im ? 2 : 0)}`);
-			lines.push(`Created: ${new Date(c.created * 1000).toISOString()}`);
-			if (!c.is_im) lines.push(`Archived: ${c.is_archived}`);
 			return txt(lines.join("\n"));
 		} catch (e) { return txt(`Slack channel_info error: ${e.message}`); }
 	}
@@ -167,7 +152,8 @@ server.tool("unread", "Check channels with unread messages.", {},
 							.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
 						const user = await userName(m.user);
 						const ch = m.channel_name || m.channel || "?";
-						return `[${ts}] [#${ch}] <${user}> ${await formatText(m.text)}`;
+						const cid = m.channel ? ` (${m.channel})` : "";
+						return `[${ts}] [#${ch}${cid}] <${user}> ${await formatText(m.text)}`;
 					}));
 					ackSlack();
 					return txt(lines.join("\n"));
@@ -189,6 +175,19 @@ server.tool("unread", "Check channels with unread messages.", {},
 			}))).filter(Boolean);
 			return txt(unread.length ? unread.join("\n") : "No unread messages.");
 		} catch (e) { return txt(`Slack unread error: ${e.message}`); }
+	}
+);
+
+server.tool("dm", "Find a DM channel ID by user name (for use with send_message).",
+	{ name: z.string().describe("User display name or @handle") },
+	async ({ name }) => {
+		try {
+			const q = name.replace(/^@/, "").toLowerCase();
+			const { channels = [] } = await slackApi("conversations.list", { types: "im,mpim", exclude_archived: true, limit: 100 });
+			const resolved = await Promise.all(channels.map(async c => ({ id: c.id, label: await dmName(c) })));
+			const match = resolved.filter(r => r.label.toLowerCase().includes(q));
+			return txt(match.length ? match.map(r => `${r.label}: ${r.id}`).join("\n") : `No DM found for "${name}"`);
+		} catch (e) { return txt(`Slack dm error: ${e.message}`); }
 	}
 );
 
