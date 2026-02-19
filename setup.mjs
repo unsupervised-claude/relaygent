@@ -102,7 +102,7 @@ async function main() {
 	} catch { /* not a git repo yet, skip */ }
 
 	// Install Node.js dependencies
-	for (const sub of ['hub', 'notifications', 'computer-use', 'email', 'slack']) {
+	for (const sub of ['hub', 'notifications', 'computer-use', 'email', 'slack', 'secrets']) {
 		console.log(`  Installing ${sub} dependencies...`);
 		execSync('npm install', { cwd: join(REPO_DIR, sub), stdio: 'pipe' });
 		console.log(`  ${sub}: ${C.green}deps installed${C.reset}`);
