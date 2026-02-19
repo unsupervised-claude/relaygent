@@ -89,11 +89,12 @@ export async function takeScreenshot(delayMs = 300, indicator) {
 	if (r.error) return [{ type: "text", text: `(screenshot failed: ${r.error})` }];
 	try {
 		const img = readScreenshot();
+		if (!img) return [{ type: "text", text: `(screenshot empty)` }];
 		return [
 			{ type: "image", data: img, mimeType: "image/png" },
 			{ type: "text", text: `Screenshot: ${r.width}x${r.height}px (use these coords for clicks)` },
 		];
-	} catch { return []; }
+	} catch (e) { return [{ type: "text", text: `(screenshot read failed: ${e.message})` }]; }
 }
 
 /** Run osascript with timeout (macOS only). */

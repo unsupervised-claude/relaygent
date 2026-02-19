@@ -33,7 +33,7 @@ const CLICK_EXPR = (sel, frame) =>
 
 // Normalize nbsp/curly-quotes; exact match preferred over substring for text-based clicks
 const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
-const _textSel = `'a,button,input[type=submit],input[type=button],summary,span,[role=button],[role=tab],[role=menuitem],[role=option],[role=link]'`;
+const _textSel = `'a,button,input[type=submit],input[type=button],summary,span,[role=button],[role=tab],[role=menuitem],[role=option],[role=link],[aria-haspopup],[role=combobox]'`;
 const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
   `var inVP=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<window.innerHeight&&r.right>0&&r.left<window.innerWidth};` +
@@ -41,8 +41,14 @@ const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
   `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
   `matches.sort(function(a,b){return inVP(b)-inVP(a)});` +
+  `if(!matches.length){` +
+    `var allVis=[...ROOT.querySelectorAll('*')].filter(function(e){return e.offsetParent!==null&&norm(e.innerText||'').trim().includes(t)&&e.children.length===0});` +
+    `allVis.forEach(function(leaf){var e=leaf;while(e&&e!==ROOT){var c=window.getComputedStyle(e).cursor;if(e.onclick||e.getAttribute('onclick')||c==='pointer'||e.getAttribute('role')||e.matches('[class*="-control"],[class*="__control"],[data-testid]')){matches.push(e);break;}e=e.parentElement;}});` +
+  `}` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
-  `el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
+  `el.scrollIntoView({block:'nearest'});` +
+  `if(el.matches('[class*="-control"],[class*="__control"]')||el.closest('[class*="-control"],[class*="__control"]')){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));}else{el.click();}` +
+  `${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
 const _setSV = `var _ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');var _sv=function(e,v){if(_ns&&_ns.set)_ns.set.call(e,v);else e.value=v};`; // React native setter
 const TYPE_EXPR = (sel, text, submit, frame) =>
@@ -187,14 +193,8 @@ export function registerBrowserTools(server, IS_LINUX) {
     { selector: z.string().describe("CSS selector to wait for"),
       timeout: z.coerce.number().optional().describe("Max wait ms, max 8000 (default: 5000)") },
     async ({ selector, timeout = 5000 }) => {
-      const capped = Math.min(timeout, 8000);
-      const expr = WAIT_EXPR(selector, capped);
-      try {
-        const result = await cdpEvalAsync(expr);
-        return jsonRes({ status: result ?? "timeout", selector });
-      } catch {
-        return jsonRes({ status: "timeout", selector });
-      }
+      const result = await cdpEvalAsync(WAIT_EXPR(selector, Math.min(timeout, 8000))).catch(() => null);
+      return jsonRes({ status: result ?? "timeout", selector });
     }
   );
 }
