@@ -28,6 +28,8 @@ export const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
   `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
   `matches.sort(function(a,b){return inVP(b)-inVP(a)});` +
+  `var modal=document.querySelector('dialog,[role=dialog],[role=alertdialog],.oo-ui-dialog');` +
+  `if(modal&&matches.some(function(e){return modal.contains(e)})){matches=matches.filter(function(e){return modal.contains(e)})}` +
   `if(!matches.length){` +
     `var allVis=[...ROOT.querySelectorAll('*')].filter(function(e){return e.offsetParent!==null&&norm(e.innerText||'').trim().includes(t)&&e.children.length===0});` +
     `allVis.forEach(function(leaf){var e=leaf;while(e&&e!==ROOT){var c=window.getComputedStyle(e).cursor;if(e.onclick||e.getAttribute('onclick')||c==='pointer'||e.getAttribute('role')||e.matches('[class*="-control"],[class*="__control"],[data-testid]')){matches.push(e);break;}e=e.parentElement;}});` +
