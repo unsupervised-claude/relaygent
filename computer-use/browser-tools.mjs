@@ -44,19 +44,21 @@ const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
+const _setSV = `var _ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');var _sv=function(e,v){if(_ns&&_ns.set)_ns.set.call(e,v);else e.value=v};`; // React native setter
 const TYPE_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);if(!el)return 'not found';` +
-  `el.focus();el.value=${JSON.stringify(text)};el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));` +
+  `el.scrollIntoView({block:'nearest'});el.focus();` +
+  `if(el.contentEditable==='true'){var r=document.createRange();r.selectNodeContents(el);r.collapse(false);var s=window.getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('insertText',false,${JSON.stringify(text)});return el.innerText.slice(-50)}` +
+  `${_setSV}_sv(el,${JSON.stringify(text)});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));` +
   (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));var f=el.closest('form');if(f)f.submit();` : ``) +
   `return el.value})()`;
-
-// char-by-char with full key events for autocomplete/typeahead
+// char-by-char key events for autocomplete/typeahead
 const TYPE_SLOW_EXPR = (sel, text, submit, frame) =>
   `(function(){${_deep}var ROOT=${frameRoot(frame)};var el=_dq(${JSON.stringify(sel)},ROOT);` +
-  `if(!el)return Promise.resolve('not found');el.focus();el.value='';var t=${JSON.stringify(text)};` +
+  `if(!el)return Promise.resolve('not found');el.focus();${_setSV}_sv(el,'');var t=${JSON.stringify(text)};` +
   `return new Promise(function(res){var i=0;(function next(){if(i>=t.length){` +
   (submit ? `el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));var f=el.closest('form');if(f)f.submit();` : ``) +
-  `return res(el.value)}var c=t[i++];el.value+=c;` +
+  `return res(el.value)}var c=t[i++];_sv(el,el.value+c);` +
   `el.dispatchEvent(new KeyboardEvent('keydown',{key:c,bubbles:true}));el.dispatchEvent(new KeyboardEvent('keypress',{key:c,bubbles:true}));` +
   `el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new KeyboardEvent('keyup',{key:c,bubbles:true}));` +
   `setTimeout(next,20)})()})})()`;
