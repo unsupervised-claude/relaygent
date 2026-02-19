@@ -86,13 +86,16 @@ export function setupHooks(config, REPO_DIR, HOME, C) {
 	const projectHash = REPO_DIR.replace(/\//g, '-');
 	const settingsDir = join(HOME, '.claude', 'projects', projectHash);
 	mkdirSync(settingsDir, { recursive: true });
+	const sessionStart = join(hooksDir, 'session-start');
+	const truncateBash = join(hooksDir, 'truncate-bash-output');
 	const settings = {
 		env: { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "95" },
 		hooks: {
-			PostToolUse: [{
-				matcher: "*",
-				hooks: [{ type: "command", command: checkNotif }],
-			}],
+			SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: sessionStart, timeout: 30 }] }],
+			PostToolUse: [
+				{ matcher: "*", hooks: [{ type: "command", command: checkNotif }] },
+				{ matcher: "Bash", hooks: [{ type: "command", command: truncateBash }] },
+			],
 		},
 	};
 	writeFileSync(join(settingsDir, 'settings.json'), JSON.stringify(settings, null, 2));

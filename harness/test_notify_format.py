@@ -167,7 +167,7 @@ class TestFormatSlack:
     def test_formats_channel_from_wake_triggers(self):
         """Slack notifications from wake-triggers have type=slack, messages with channel_id/name."""
         notifs = [{"type": "slack", "count": 5,
-                   "messages": [{"channel_id": "C0AG77MFLAU", "channel_name": "general", "unread": 5}]}]
+                   "messages": [{"channel_id": "C0ABC123", "channel_name": "general", "unread": 5}]}]
         result = format_slack(notifs)
         assert len(result) == 1
         assert "general" in result[0]
