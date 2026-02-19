@@ -33,12 +33,14 @@ const CLICK_EXPR = (sel, frame) =>
 
 // Normalize nbsp/curly-quotes; exact match preferred over substring for text-based clicks
 const _norm = `var norm=s=>s.replace(/[\\u00a0]/g,' ').replace(/[\\u2018\\u2019]/g,"'").replace(/[\\u201c\\u201d]/g,'"').toLowerCase()`;
-const _textSel = `'a,button,input[type=submit],input[type=button],summary,[role=button],[role=tab],[role=menuitem],[role=option],[role=link]'`;
+const _textSel = `'a,button,input[type=submit],input[type=button],summary,span,[role=button],[role=tab],[role=menuitem],[role=option],[role=link]'`;
 const TEXT_CLICK_EXPR = (text, idx, frame) =>
   `(function(){${_deep}${_norm};var ROOT=${frameRoot(frame)};var t=norm(${JSON.stringify(text)}),i=${idx};` +
+  `var inVP=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<window.innerHeight&&r.right>0&&r.left<window.innerWidth};` +
   `var els=_dqa(${_textSel},ROOT).filter(function(e){return e.offsetParent!==null});` +
   `var exact=els.filter(function(e){return norm(e.innerText||e.value||'').trim()===t});` +
   `var matches=exact.length?exact:t.length>3?els.filter(function(e){return norm(e.innerText||e.value||'').includes(t)}):[];` +
+  `matches.sort(function(a,b){return inVP(b)-inVP(a)});` +
   `var el=matches[i];if(!el)return JSON.stringify({error:'No match',count:matches.length});` +
   `el.scrollIntoView({block:'nearest'});el.click();${retCoords(frame, `,text:(el.innerText||el.value||'').trim().substring(0,50),count:matches.length`)}})()`;
 
