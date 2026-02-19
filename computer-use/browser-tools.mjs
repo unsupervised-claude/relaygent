@@ -1,7 +1,6 @@
 // Browser automation tools via CDP — registers browser_navigate, browser_eval, browser_coords, etc.
-
 import { z } from "zod";
-import { hsCall, takeScreenshot } from "./hammerspoon.mjs";
+import { hsCall, takeScreenshot, scaleFactor } from "./hammerspoon.mjs";
 import { cdpEval, cdpEvalAsync, cdpNavigate, cdpClick, cdpDisconnect, patchChromePrefs } from "./cdp.mjs";
 
 const jsonRes = (r) => ({ content: [{ type: "text", text: JSON.stringify(r, null, 2) }] });
@@ -101,7 +100,6 @@ export function registerBrowserTools(server, IS_LINUX) {
     { expression: z.string().describe("JavaScript expression to evaluate") },
     async ({ expression }) => jsonRes({ result: await cdpEval(expression) })
   );
-
   server.tool("browser_coords",
     "Get screen coordinates {sx, sy} for a CSS selector in Chrome. Use result with click().",
     { selector: z.string().describe("CSS selector (e.g. 'input', 'a.nav-link', '#submit')"),
@@ -109,10 +107,13 @@ export function registerBrowserTools(server, IS_LINUX) {
     async ({ selector, frame }) => {
       const raw = await cdpEval(COORD_EXPR(selector, frame));
       if (!raw) return jsonRes({ error: `Element not found: ${selector}` });
-      try { return jsonRes(JSON.parse(raw)); } catch { return jsonRes({ error: "Parse failed", raw }); }
+      try {
+        const c = JSON.parse(raw), sf = scaleFactor();
+        if (sf !== 1) { c.sx = Math.round(c.sx / sf); c.sy = Math.round(c.sy / sf); }
+        return jsonRes(c);
+      } catch { return jsonRes({ error: "Parse failed", raw }); }
     }
   );
-
   server.tool("browser_type",
     "Type text into a web input via JS injection (avoids address bar capture). Auto-returns screenshot.",
     { selector: z.string().describe("CSS selector for the input"),
@@ -142,7 +143,6 @@ export function registerBrowserTools(server, IS_LINUX) {
       return actionRes(`Clicked ${selector} at (${coords.sx},${coords.sy})`, 1000);
     }
   );
-
   server.tool("browser_click_text",
     "Click a visible element by its text content (links, buttons). Safer than browser_click when multiple elements share a selector. Auto-returns screenshot.",
     { text: z.string().describe("Text to search for (case-insensitive contains match)"),
