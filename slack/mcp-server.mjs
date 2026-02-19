@@ -21,7 +21,7 @@ function ackSlack() {
 server.tool("channels",
 	"List Slack channels the user has joined.",
 	{ limit: z.number().default(100).describe("Max channels to return"),
-	  types: z.string().default("public_channel,private_channel")
+	  types: z.string().default("public_channel,private_channel,mpim,im")
 		.describe("Channel types (public_channel,private_channel,mpim,im)") },
 	async ({ limit, types }) => {
 		try {
