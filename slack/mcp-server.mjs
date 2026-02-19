@@ -50,7 +50,7 @@ server.tool("read_messages",
 					.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
 				const user = await userName(m.user || m.bot_id);
 				const replies = m.reply_count ? ` [${m.reply_count} replies, thread_ts: ${m.ts}]` : "";
-				return `[${ts}] <${user}> ${await formatText(m.text)}${replies}`;
+				return `[${ts}] (ts:${m.ts}) <${user}> ${await formatText(m.text)}${replies}`;
 			}));
 			ackSlack();
 			return txt(lines.join("\n"));
