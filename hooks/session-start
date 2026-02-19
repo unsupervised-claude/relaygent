@@ -11,9 +11,9 @@ if [ "$SOURCE" != "startup" ]; then
     exit 0
 fi
 
-# Find orient.sh relative to this hook script
+# Find orient.sh relative to this hook script (lives in harness/, not hooks/)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ORIENT="$SCRIPT_DIR/orient.sh"
+ORIENT="$SCRIPT_DIR/../harness/orient.sh"
 
 if [ ! -x "$ORIENT" ]; then
     exit 0
